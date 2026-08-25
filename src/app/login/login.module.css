@@ -1,0 +1,217 @@
+/* src/app/login/login.module.css */
+
+.authWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100vw;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
+}
+
+/* Background Animated Blobs */
+.bgBlob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: 0;
+  opacity: 0.6;
+}
+
+.blob1 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #6366F1 0%, rgba(99, 102, 241, 0) 70%);
+  top: -100px;
+  left: -100px;
+  animation: floatBlob1 15s infinite ease-in-out;
+}
+
+.blob2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, #4F46E5 0%, rgba(79, 70, 229, 0) 70%);
+  bottom: -150px;
+  right: -100px;
+  animation: floatBlob2 18s infinite ease-in-out;
+}
+
+@keyframes floatBlob1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(60px, 40px) scale(1.15); }
+}
+
+@keyframes floatBlob2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-80px, -50px) scale(0.9); }
+}
+
+/* Login Card */
+.authCard {
+  max-width: 450px;
+  width: 100%;
+  padding: 40px 30px;
+  z-index: 1;
+  text-align: center;
+}
+
+.logoArea {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+  color: var(--primary);
+}
+
+.title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: var(--text-sub);
+  margin-bottom: 30px;
+}
+
+/* Role Segmented Switch */
+.roleTabs {
+  display: flex;
+  background: rgba(79, 70, 229, 0.08);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(79, 70, 229, 0.05);
+}
+
+.roleTab {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-sub);
+  transition: var(--transition-smooth);
+}
+
+.activeTab {
+  background: var(--primary);
+  color: var(--text-inverse) !important;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+}
+
+/* Form inputs */
+.formGroup {
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text-main);
+}
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inputIcon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-sub);
+}
+
+.input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  backdrop-filter: var(--glass-blur);
+  transition: var(--transition-smooth);
+}
+
+.input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--input-focus);
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--primary);
+  color: #FFFFFF;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 10px;
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.submitBtn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.submitBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.footer {
+  margin-top: 24px;
+  font-size: 0.85rem;
+  color: var(--text-sub);
+}
+
+.footerLink {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 5px;
+  transition: var(--transition-smooth);
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
+/* Dark Mode toggle positioning */
+.themeToggleBtn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-main);
+  box-shadow: var(--glass-shadow);
+  z-index: 2;
+}
+
+.themeToggleBtn:hover {
+  background: rgba(255, 255, 255, 0.6);
+  transform: scale(1.05);
+}

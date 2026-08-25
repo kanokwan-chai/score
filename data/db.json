@@ -1,0 +1,21 @@
+{
+  "users": [
+    {
+      "id": "user-admin",
+      "student_id": null,
+      "username": "admin",
+      "passwordHash": "483f78674cf43c5c77969e262b97118daa53ffe4845493b4ca2c3ae806b915cf",
+      "role": "admin",
+      "first_name": "สมศรี",
+      "last_name": "รักการสอน",
+      "classroom": null,
+      "status": "active",
+      "created_at": "2026-07-20T03:50:56.386Z"
+    }
+  ],
+  "subjects": [],
+  "classrooms": [],
+  "assignments": [],
+  "scores": [],
+  "attendance": []
+}

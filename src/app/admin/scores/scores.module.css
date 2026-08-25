@@ -1,0 +1,119 @@
+/* src/app/admin/scores/scores.module.css */
+
+.filterCard {
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.filterRow {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  flex: 1;
+  min-width: 200px;
+}
+
+.tableHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.assignmentInfo {
+  font-size: 0.9rem;
+  color: var(--text-sub);
+  display: flex;
+  gap: 16px;
+  background: rgba(79, 70, 229, 0.05);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(79, 70, 229, 0.08);
+}
+
+.infoLabel {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* Score Table Inputs */
+.scoreInput {
+  width: 70px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.scoreInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--input-focus);
+}
+
+.feedbackInput {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  min-width: 150px;
+}
+
+.feedbackInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--input-focus);
+}
+
+.noteInput {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  min-width: 120px;
+}
+
+.noteInput:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--input-focus);
+}
+
+/* Grade badges */
+.gradeBadge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  min-width: 32px;
+}
+
+.gradeA { background: rgba(16, 185, 129, 0.15); color: var(--success); }
+.gradeB { background: rgba(59, 130, 246, 0.15); color: var(--info); }
+.gradeC { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+.gradeD { background: rgba(139, 92, 246, 0.15); color: #8B5CF6; }
+.gradeF { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+/* Save footer bar */
+.saveFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 24px;
+}
