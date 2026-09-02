@@ -257,8 +257,8 @@ export default function StudentDashboardPage() {
           {/* My Scores */}
           <Link href="/student/scores" className={styles.actionButton}>
             <FileText size={28} className={styles.actionIcon} />
-            <span className={styles.actionText}>ดูสมุดคะแนนสอบ</span>
-            <span className={styles.actionDesc}>ตรวจสอบคะแนนสอบดิบและคะแนนเก็บคำนวณสะสม</span>
+            <span className={styles.actionText}>ตรวจสอบการส่งงาน</span>
+            <span className={styles.actionDesc}>ตรวจสอบรายการงานที่ส่งไปแล้ว หรือรายการค้างส่ง</span>
           </Link>
 
           {/* Feedback */}

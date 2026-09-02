@@ -203,7 +203,7 @@ export default function StudentScoresPage() {
         </div>
       ) : (
         <div>
-          {/* ส่วนแสดงคะแนนสะสมรวมวิชานี้ */}
+          {/* ส่วนแสดงคะแนนสะสมรวมวิชานี้ถูกซ่อนตามความต้องการ */}
           <div className="glass-card" style={{ 
             padding: '20px', 
             marginBottom: '24px', 
@@ -218,18 +218,11 @@ export default function StudentScoresPage() {
           }}>
             <div>
               <h3 style={{ margin: 0, fontWeight: 700, color: 'var(--text-main)', fontSize: '1.25rem' }}>
-                สรุปคะแนนสะสมวิชา: {subjectFilter}
+                สถานะการส่งงานวิชา: {subjectFilter}
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-sub)' }}>
-                คะแนนจะถูกปรับปรุงอัตโนมัติทันทีที่มีการตรวจประเมินผลสัมฤทธิ์
+                ตรวจสอบรายการงานที่คุณได้ส่งไปแล้ว หรือยังค้างส่งในวิชานี้
               </p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-sub)', fontWeight: 600 }}>คะแนนสะสมสัดส่วนวิชานี้:</span>
-              <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1.1 }}>
-                {totalEarnedWeight.toFixed(2)}
-                <span style={{ fontSize: '1rem', color: 'var(--text-sub)', fontWeight: 500 }}> / {totalWeightMax} คะแนนสัดส่วนทั้งหมด</span>
-              </div>
             </div>
           </div>
 
@@ -262,9 +255,6 @@ export default function StudentScoresPage() {
                     <Award size={16} />
                     <span>{cat.name}</span>
                   </div>
-                  <div style={{ fontSize: '0.9rem', background: 'rgba(255, 255, 255, 0.25)', padding: '4px 12px', borderRadius: '20px' }}>
-                    สัดส่วนหมวดที่ได้ {earned.toFixed(2)} / {max} คะแนน
-                  </div>
                 </div>
 
                 {/* ตารางงานในหมวดหมู่ */}
@@ -277,7 +267,7 @@ export default function StudentScoresPage() {
                     fontSize: '0.9rem',
                     fontStyle: 'italic'
                   }}>
-                    ยังไม่มีรายการเก็บคะแนนสำหรับหมวดหมู่นี้
+                    ยังไม่มีรายการในหมวดหมู่นี้
                   </div>
                 ) : (
                   <div className={styles.tableContainer} style={{ margin: 0, borderRadius: 0, border: 'none' }}>
@@ -287,7 +277,7 @@ export default function StudentScoresPage() {
                           <th className={styles.th} style={{ width: '60px' }}>ลำดับ</th>
                           <th className={styles.th}>ชื่องานที่มอบหมาย</th>
                           <th className={styles.th} style={{ width: '150px' }}>ประเภทงาน</th>
-                          <th className={styles.th} style={{ width: '150px', textAlign: 'center' }}>คะแนนดิบที่ได้</th>
+                          <th className={styles.th} style={{ width: '150px', textAlign: 'center' }}>สถานะการส่งงาน</th>
                           <th className={styles.th} style={{ width: '120px' }}>วันที่ส่งตรวจ</th>
                           <th className={styles.th}>ข้อสะท้อนกลับของอาจารย์ (Feedback)</th>
                         </tr>
@@ -308,10 +298,9 @@ export default function StudentScoresPage() {
                                   ค้างส่ง/ยังไม่ตรวจ
                                 </span>
                               ) : (
-                                <div>
-                                  <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>{score.raw_score}</strong>
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-sub)' }}> / {score.full_score}</span>
-                                </div>
+                                <span style={{ color: '#059669', fontSize: '0.85rem', fontWeight: 600, background: 'rgba(16, 185, 129, 0.15)', padding: '6px 12px', borderRadius: '20px', display: 'inline-block' }}>
+                                  ✓ ส่งแล้ว (ตรวจแล้ว)
+                                </span>
                               )}
                             </td>
                             <td className={styles.td} style={{ fontSize: '0.85rem' }}>
