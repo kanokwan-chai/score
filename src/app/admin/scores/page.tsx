@@ -300,9 +300,9 @@ export default function AdminScoresPage() {
               let hasGraded = false;
 
               catAsms.forEach((asm: any) => {
+                catFullSum += asm.full_score;
                 const s = row.scores.find((score: any) => score.assignment_id === asm.id);
                 if (s && s.raw_score !== -1) {
-                  catFullSum += asm.full_score;
                   catRawSum += s.raw_score;
                   hasGraded = true;
                 }

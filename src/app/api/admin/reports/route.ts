@@ -85,9 +85,9 @@ export async function GET(request: Request) {
         let catRawSum = 0;
         
         catAsms.forEach(asm => {
+          catFullSum += asm.full_score;
           const score = db.scores.find(s => s.assignment_id === asm.id && s.student_id === student.id);
           if (score && score.raw_score !== -1) {
-            catFullSum += asm.full_score;
             catRawSum += score.raw_score;
           }
         });
