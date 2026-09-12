@@ -64,7 +64,7 @@ export default function AdminReportsPage() {
   
   const [isLoadingFilters, setIsLoadingFilters] = useState(true);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
-  const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+  const viewMode = 'missing';
 
   // Load subjects and classrooms on mount
   const loadFilters = async () => {
@@ -320,43 +320,6 @@ export default function AdminReportsPage() {
               />
             </div>
             
-            <div style={{ display: 'flex', gap: '8px', background: 'rgba(99, 102, 241, 0.08)', padding: '4px', borderRadius: '8px', margin: '0 auto' }}>
-              <button
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: viewMode === 'overview' ? '#fff' : 'transparent',
-                  color: viewMode === 'overview' ? 'var(--primary)' : 'var(--text-sub)',
-                  fontWeight: viewMode === 'overview' ? 700 : 500,
-                  boxShadow: viewMode === 'overview' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  transition: 'all 0.2s'
-                }}
-                onClick={() => setViewMode('overview')}
-              >
-                ดูแบบย่อ (ภาพรวม)
-              </button>
-              <button
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: viewMode === 'detailed' ? '#fff' : 'transparent',
-                  color: viewMode === 'detailed' ? 'var(--primary)' : 'var(--text-sub)',
-                  fontWeight: viewMode === 'detailed' ? 700 : 500,
-                  boxShadow: viewMode === 'detailed' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  transition: 'all 0.2s'
-                }}
-                onClick={() => setViewMode('detailed')}
-              >
-                ดูแบบละเอียด (กางทุกชิ้นงาน)
-              </button>
-            </div>
-
             <div className={styles.btnRow}>
               <button className={styles.exportBtn} onClick={handlePrint} style={{ background: 'var(--primary)', color: '#fff', border: 'none' }}>
                 <Printer size={18} />
@@ -374,183 +337,76 @@ export default function AdminReportsPage() {
             {/* Header Document (Visible on print & screen) */}
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                รายงานสรุปคะแนนและเกรดเฉลี่ยสะสมรายวิชา
+                สรุปงานค้างรายวิชา
               </h2>
               <p style={{ color: 'var(--text-sub)', fontSize: '0.95rem', marginTop: '6px' }}>
                 วิชา: <strong style={{ color: 'var(--text-main)' }}>{reportData.subject.code} {reportData.subject.name}</strong> | ห้องเรียน: <strong style={{ color: 'var(--text-main)' }}>{reportData.classroom}</strong>
               </p>
               <p style={{ color: 'var(--text-sub)', fontSize: '0.8rem', marginTop: '4px' }}>
-                วันที่พิมพ์เอกสาร: {new Date().toLocaleDateString('th-TH')} | เกณฑ์คะแนนเก็บรวมสูงสุด: {reportData.totalWeightMax} คะแนน
+                วันที่พิมพ์เอกสาร: {new Date().toLocaleDateString('th-TH')}
               </p>
             </div>
 
             {/* Master Gradebook Table */}
             <div className={tableStyles.tableContainer} style={{ border: '1px solid #ddd', borderRadius: '8px' }}>
-              <table className={tableStyles.table}>
-                <thead className={tableStyles.thead} style={{ background: '#f5f5f5' }}>
-                  <tr>
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '60px', textAlign: 'center', verticalAlign: 'middle' }}>อันดับ</th>
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '100px', verticalAlign: 'middle' }}>รหัส</th>
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '160px', verticalAlign: 'middle' }}>ชื่อ - นามสกุล</th>
-                    
-                    {activeCategories.map(cat => {
-                      const catAsms = reportData.assignments.filter(a => a.category === cat.key);
-                      return (
-                        <th 
-                          key={cat.key} 
-                          colSpan={viewMode === 'detailed' ? catAsms.length + 1 : 1} 
-                          className={tableStyles.th} 
-                          style={{ 
-                            textAlign: 'center', 
-                            background: cat.bgColor,
-                            borderBottom: `2px solid ${cat.color}`,
-                            color: cat.color,
-                            fontWeight: 700,
-                            verticalAlign: 'middle',
-                            padding: '10px 6px'
-                          }}
-                        >
-                          {cat.name} ({cat.weight}%)
-                        </th>
-                      );
-                    })}
-
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '100px', textAlign: 'center', verticalAlign: 'middle' }}>คะแนนสะสม</th>
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '90px', textAlign: 'center', verticalAlign: 'middle' }}>เปอร์เซ็นต์</th>
-                    <th rowSpan={2} className={tableStyles.th} style={{ width: '80px', textAlign: 'center', verticalAlign: 'middle' }}>เกรด</th>
-                  </tr>
-                  <tr>
-                    {activeCategories.map(cat => {
-                      const catAsms = reportData.assignments.filter(a => a.category === cat.key);
-                      return (
-                        <React.Fragment key={cat.key}>
-                          {viewMode === 'detailed' && catAsms.map(asm => (
-                            <th 
-                              key={asm.id} 
-                              className={tableStyles.th} 
-                              style={{ 
-                                fontSize: '0.75rem', 
-                                textAlign: 'center', 
-                                minWidth: '95px',
-                                background: '#fafafa',
-                                fontWeight: 500,
-                                padding: '8px 4px'
-                              }}
-                            >
-                              <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '120px', margin: '0 auto' }} title={asm.title}>
-                                {asm.title}
-                              </div>
-                              <div style={{ color: 'var(--text-sub)', fontSize: '0.7rem' }}>
-                                (เต็ม {asm.full_score})
-                              </div>
-                            </th>
-                          ))}
-                          <th 
-                            className={tableStyles.th} 
-                            style={{ 
-                              fontSize: '0.75rem', 
-                              textAlign: 'center', 
-                              minWidth: '85px',
-                              background: 'rgba(0,0,0,0.02)',
-                              color: cat.color,
-                              fontWeight: 700,
-                              padding: '8px 4px'
-                            }}
-                          >
-                            รวมหมวด
-                          </th>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRows.map((student) => (
-                    <tr key={student.id} className={tableStyles.tr}>
-                      <td className={tableStyles.td} style={{ textAlign: 'center', fontWeight: 700 }}>
-                        {student.rank === 1 ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', color: 'goldenrod' }}>
-                            <Award size={14} />
-                            <span>1</span>
-                          </div>
-                        ) : student.rank}
-                      </td>
-                      <td className={tableStyles.td}>
-                        <span className={tableStyles.codeBadge} style={{ background: 'none', border: '1px solid #ddd' }}>
-                          {student.student_id}
-                        </span>
-                      </td>
-                      <td className={tableStyles.td} style={{ fontWeight: 600 }}>
-                        {student.first_name} {student.last_name}
-                      </td>
-
-                      {/* Render scores grouped by category */}
-                      {activeCategories.map(cat => {
-                        const catAsms = reportData.assignments.filter(a => a.category === cat.key);
-                        let catRawSum = 0;
-                        let catFullSum = 0;
-                        let hasSubmittedAny = false;
-                        
-                        catAsms.forEach(asm => {
-                          const sc = student.scores.find(s => s.assignment_id === asm.id);
-                          if (sc && sc.raw_score !== -1) {
-                            catRawSum += sc.raw_score;
-                            catFullSum += asm.full_score;
-                            hasSubmittedAny = true;
-                          }
-                        });
-                        
-                        const catEarned = catFullSum > 0 ? (catRawSum / catFullSum) * cat.weight : 0;
-                        
-                        return (
-                          <React.Fragment key={cat.key}>
-                            {viewMode === 'detailed' && catAsms.map(asm => {
-                              const sc = student.scores.find(s => s.assignment_id === asm.id);
-                              return (
-                                <td key={asm.id} className={tableStyles.td} style={{ textAlign: 'center', fontSize: '0.85rem' }}>
-                                  {!sc || sc.raw_score === -1 ? (
-                                    <span style={{ color: '#EF4444', fontStyle: 'italic', fontSize: '0.75rem' }}>ยังไม่ส่ง</span>
-                                  ) : (
-                                    <div>
-                                      <strong style={{ color: 'var(--text-main)' }}>{sc.raw_score}</strong>
-                                      <span style={{ color: 'var(--text-sub)', fontSize: '0.7rem' }}>/{asm.full_score}</span>
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td 
-                              className={tableStyles.th} 
-                              style={{ 
-                                textAlign: 'center', 
-                                fontWeight: 700, 
-                                color: cat.color, 
-                                background: cat.bgColor,
-                                fontSize: '0.9rem' 
-                              }}
-                            >
-                              {hasSubmittedAny ? catEarned.toFixed(2) : '0.00'}
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-sub)', fontWeight: 400 }}> / {cat.weight}</span>
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-
-                      <td className={tableStyles.td} style={{ textAlign: 'center', fontWeight: 700, color: 'var(--primary)', fontSize: '0.95rem' }}>
-                        {student.keep_score_sum} / {reportData.totalWeightMax}
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center', fontWeight: 500 }}>
-                        {student.percentage}%
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <span className={getGradeStyle(student.grade)}>
-                          {student.grade}
-                        </span>
-                      </td>
+                <table className={tableStyles.table}>
+                  <thead className={tableStyles.thead} style={{ background: '#f5f5f5' }}>
+                    <tr>
+                      <th className={tableStyles.th} style={{ width: '60px', textAlign: 'center' }}>ลำดับ</th>
+                      <th className={tableStyles.th} style={{ width: '100px' }}>รหัส</th>
+                      <th className={tableStyles.th} style={{ width: '200px' }}>ชื่อ - นามสกุล</th>
+                      <th className={tableStyles.th} style={{ width: '100px', textAlign: 'center' }}>จำนวนงานค้าง</th>
+                      <th className={tableStyles.th}>รายชื่องานที่ยังไม่ส่ง</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const studentsWithMissing = filteredRows.map(student => {
+                        const missingAsms = reportData.assignments.filter(asm => {
+                          const sc = student.scores.find(s => s.assignment_id === asm.id);
+                          return !sc || sc.raw_score === -1;
+                        });
+                        return { ...student, missingAsms };
+                      }).filter(s => s.missingAsms.length > 0);
+
+                      if (studentsWithMissing.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--success)', fontWeight: 600 }}>
+                              ไม่มีนักเรียนค้างส่งงานในห้องนี้
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return studentsWithMissing.map((student, idx) => (
+                        <tr key={student.id} className={tableStyles.tr}>
+                          <td className={tableStyles.td} style={{ textAlign: 'center' }}>{idx + 1}</td>
+                          <td className={tableStyles.td}>
+                            <span className={tableStyles.codeBadge} style={{ background: 'none', border: '1px solid #ddd' }}>
+                              {student.student_id}
+                            </span>
+                          </td>
+                          <td className={tableStyles.td} style={{ fontWeight: 600 }}>
+                            {student.first_name} {student.last_name}
+                          </td>
+                          <td className={tableStyles.td} style={{ textAlign: 'center', color: '#EF4444', fontWeight: 700 }}>
+                            {student.missingAsms.length}
+                          </td>
+                          <td className={tableStyles.td}>
+                            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.85rem' }}>
+                              {student.missingAsms.map(asm => (
+                                <li key={asm.id} style={{ marginBottom: '4px' }}>
+                                  {asm.title} <span style={{ color: 'var(--text-sub)', fontSize: '0.75rem' }}>({categories.find(c => c.key === asm.category)?.name})</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
             </div>
 
             {/* Document Footer Signature lines (Only visible on print) */}
