@@ -27,39 +27,34 @@ export async function GET() {
 
     // Get all assignments targeted to the student's classroom
     const classroomAssignments = db.assignments.filter(a => a.classroom === student.classroom);
-    const classroomAsmIds = classroomAssignments.map(a => a.id);
 
-    // Get all scores belonging to this student for these assignments
-    const studentScores = db.scores.filter(
-      s => s.student_id === student.id && classroomAsmIds.includes(s.assignment_id)
-    );
+    // Build joined list from ALL assignments (not just graded ones)
+    // so students can see every assignment even if ungraded
+    const joinedScores = classroomAssignments.map(assignment => {
+      const score = db.scores.find(
+        s => s.student_id === student.id && s.assignment_id === assignment.id
+      );
 
-    // Join scores with assignment and subject details
-    const joinedScores = studentScores.map(score => {
-      const assignment = classroomAssignments.find(a => a.id === score.assignment_id);
       let subjectName = 'ไม่ระบุรายวิชา';
       let subjectCode = '';
-
-      if (assignment) {
-        const subject = db.subjects.find(s => s.id === assignment.subject_id);
-        if (subject) {
-          subjectName = subject.name;
-          subjectCode = subject.code;
-        }
+      const subject = db.subjects.find(s => s.id === assignment.subject_id);
+      if (subject) {
+        subjectName = subject.name;
+        subjectCode = subject.code;
       }
 
       return {
-        id: score.id,
-        assignment_title: assignment ? assignment.title : 'ไม่พบหัวข้อชิ้นงาน',
-        assignment_type: assignment ? assignment.type : 'Assignment',
-        category: assignment ? assignment.category : 'assignment',
-        full_score: assignment ? assignment.full_score : 0,
-        keep_score: assignment ? assignment.keep_score : 0,
-        due_date: assignment ? assignment.due_date : '',
-        raw_score: score.raw_score, // -1 means ungraded
-        calculated_score: score.calculated_score,
-        feedback: score.feedback,
-        graded_date: score.created_at,
+        id: score ? score.id : `placeholder-${assignment.id}`,
+        assignment_title: assignment.title,
+        assignment_type: assignment.type,
+        category: assignment.category,
+        full_score: assignment.full_score,
+        keep_score: assignment.keep_score,
+        due_date: assignment.due_date,
+        raw_score: score ? score.raw_score : -1,  // -1 = ยังไม่ตรวจ
+        calculated_score: score ? score.calculated_score : 0,
+        feedback: score ? score.feedback : '',
+        graded_date: score ? score.created_at : '',
         subject_name: subjectName,
         subject_code: subjectCode
       };
