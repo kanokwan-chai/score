@@ -2,8 +2,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Printer, BookOpen, AlertCircle } from 'lucide-react';
+import { Search, Printer, BookOpen, AlertCircle, Download } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import * as XLSX from 'xlsx';
 import styles from '../students/students.module.css';
 import filterStyles from '../scores/scores.module.css';
 import tableStyles from '../subjects/subjects.module.css';
@@ -131,6 +132,77 @@ export default function AdminMissingPage() {
 
   const handlePrint = () => window.print();
 
+  const handleExportExcel = () => {
+    if (!reportData || filteredRows.length === 0) {
+      showToast('ไม่มีข้อมูลสำหรับส่งออก', 'warning');
+      return;
+    }
+
+    const { subject, classroom, assignments } = reportData;
+
+    // สร้าง sheet แบบ 1 แถว = 1 งานค้างของนักเรียน 1 คน
+    const rows: (string | number)[][] = [];
+
+    // Header
+    rows.push([
+      'ลำดับ',
+      'รหัสนักเรียน',
+      'ชื่อ',
+      'นามสกุล',
+      'ชื่องานที่ค้าง',
+      'หมวดหมู่',
+      'คะแนนเต็ม',
+    ]);
+
+    let rowIndex = 0;
+    filteredRows.forEach(student => {
+      const missingAsms = assignments.filter(asm => {
+        const sc = student.scores.find(s => s.assignment_id === asm.id);
+        return !sc || sc.raw_score === -1;
+      });
+
+      if (missingAsms.length === 0) return;
+      rowIndex++;
+
+      missingAsms.forEach((asm, asmIdx) => {
+        const catName = categories.find(c => c.key === asm.category)?.name || asm.category;
+        rows.push([
+          asmIdx === 0 ? rowIndex : '',        // ลำดับ (ขึ้นเฉพาะแถวแรกของนักเรียน)
+          asmIdx === 0 ? student.student_id : '',
+          asmIdx === 0 ? student.first_name : '',
+          asmIdx === 0 ? student.last_name : '',
+          asm.title,
+          catName,
+          asm.full_score,
+        ]);
+      });
+    });
+
+    if (rows.length <= 1) {
+      showToast('ไม่มีนักเรียนค้างส่งงานในห้องนี้', 'success');
+      return;
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet([
+      [`สรุปงานค้างรายวิชา`],
+      [`วิชา: ${subject.code} ${subject.name} | ห้องเรียน: ${classroom}`],
+      [`วันที่ออกรายงาน: ${new Date().toLocaleDateString('th-TH')}`],
+      [],
+      ...rows,
+    ]);
+
+    // ปรับความกว้างคอลัมน์
+    ws['!cols'] = [
+      { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 16 },
+      { wch: 40 }, { wch: 18 }, { wch: 12 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'งานค้าง');
+    XLSX.writeFile(wb, `งานค้าง_${subject.code}_ห้อง_${classroom}.xlsx`);
+    showToast('ดาวน์โหลด Excel เรียบร้อยแล้ว', 'success');
+  };
+
   return (
     <div className="animate-fade-in print-area">
       {/* Filters */}
@@ -210,6 +282,13 @@ export default function AdminMissingPage() {
               >
                 <Printer size={18} />
                 <span>พิมพ์รายงาน / PDF</span>
+              </button>
+              <button
+                className={styles.exportBtn}
+                onClick={handleExportExcel}
+              >
+                <Download size={18} />
+                <span>ส่งออกเป็น Excel</span>
               </button>
             </div>
           </div>
