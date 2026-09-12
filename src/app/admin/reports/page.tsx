@@ -64,7 +64,7 @@ export default function AdminReportsPage() {
   
   const [isLoadingFilters, setIsLoadingFilters] = useState(true);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
-  const [viewMode, setViewMode] = useState<'overview' | 'detailed'>('overview');
+  const [viewMode, setViewMode] = useState<'overview' | 'detailed' | 'missing'>('overview');
 
   // Load subjects and classrooms on mount
   const loadFilters = async () => {
@@ -355,6 +355,23 @@ export default function AdminReportsPage() {
               >
                 ดูแบบละเอียด (กางทุกชิ้นงาน)
               </button>
+              <button
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: viewMode === 'missing' ? '#fff' : 'transparent',
+                  color: viewMode === 'missing' ? '#EF4444' : 'var(--text-sub)',
+                  fontWeight: viewMode === 'missing' ? 700 : 500,
+                  boxShadow: viewMode === 'missing' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem',
+                  transition: 'all 0.2s'
+                }}
+                onClick={() => setViewMode('missing')}
+              >
+                สรุปงานค้าง
+              </button>
             </div>
 
             <div className={styles.btnRow}>
@@ -374,18 +391,78 @@ export default function AdminReportsPage() {
             {/* Header Document (Visible on print & screen) */}
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
               <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)' }}>
-                รายงานสรุปคะแนนและเกรดเฉลี่ยสะสมรายวิชา
+                {viewMode === 'missing' ? 'สรุปงานค้างรายวิชา' : 'รายงานสรุปคะแนนและเกรดเฉลี่ยสะสมรายวิชา'}
               </h2>
               <p style={{ color: 'var(--text-sub)', fontSize: '0.95rem', marginTop: '6px' }}>
                 วิชา: <strong style={{ color: 'var(--text-main)' }}>{reportData.subject.code} {reportData.subject.name}</strong> | ห้องเรียน: <strong style={{ color: 'var(--text-main)' }}>{reportData.classroom}</strong>
               </p>
               <p style={{ color: 'var(--text-sub)', fontSize: '0.8rem', marginTop: '4px' }}>
-                วันที่พิมพ์เอกสาร: {new Date().toLocaleDateString('th-TH')} | เกณฑ์คะแนนเก็บรวมสูงสุด: {reportData.totalWeightMax} คะแนน
+                วันที่พิมพ์เอกสาร: {new Date().toLocaleDateString('th-TH')} {viewMode !== 'missing' && `| เกณฑ์คะแนนเก็บรวมสูงสุด: ${reportData.totalWeightMax} คะแนน`}
               </p>
             </div>
 
             {/* Master Gradebook Table */}
             <div className={tableStyles.tableContainer} style={{ border: '1px solid #ddd', borderRadius: '8px' }}>
+              {viewMode === 'missing' ? (
+                <table className={tableStyles.table}>
+                  <thead className={tableStyles.thead} style={{ background: '#f5f5f5' }}>
+                    <tr>
+                      <th className={tableStyles.th} style={{ width: '60px', textAlign: 'center' }}>ลำดับ</th>
+                      <th className={tableStyles.th} style={{ width: '100px' }}>รหัส</th>
+                      <th className={tableStyles.th} style={{ width: '200px' }}>ชื่อ - นามสกุล</th>
+                      <th className={tableStyles.th} style={{ width: '100px', textAlign: 'center' }}>จำนวนงานค้าง</th>
+                      <th className={tableStyles.th}>รายชื่องานที่ยังไม่ส่ง</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const studentsWithMissing = filteredRows.map(student => {
+                        const missingAsms = reportData.assignments.filter(asm => {
+                          const sc = student.scores.find(s => s.assignment_id === asm.id);
+                          return !sc || sc.raw_score === -1;
+                        });
+                        return { ...student, missingAsms };
+                      }).filter(s => s.missingAsms.length > 0);
+
+                      if (studentsWithMissing.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={5} style={{ textAlign: 'center', padding: '30px', color: 'var(--success)', fontWeight: 600 }}>
+                              ไม่มีนักเรียนค้างส่งงานในห้องนี้
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return studentsWithMissing.map((student, idx) => (
+                        <tr key={student.id} className={tableStyles.tr}>
+                          <td className={tableStyles.td} style={{ textAlign: 'center' }}>{idx + 1}</td>
+                          <td className={tableStyles.td}>
+                            <span className={tableStyles.codeBadge} style={{ background: 'none', border: '1px solid #ddd' }}>
+                              {student.student_id}
+                            </span>
+                          </td>
+                          <td className={tableStyles.td} style={{ fontWeight: 600 }}>
+                            {student.first_name} {student.last_name}
+                          </td>
+                          <td className={tableStyles.td} style={{ textAlign: 'center', color: '#EF4444', fontWeight: 700 }}>
+                            {student.missingAsms.length}
+                          </td>
+                          <td className={tableStyles.td}>
+                            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.85rem' }}>
+                              {student.missingAsms.map(asm => (
+                                <li key={asm.id} style={{ marginBottom: '4px' }}>
+                                  {asm.title} <span style={{ color: 'var(--text-sub)', fontSize: '0.75rem' }}>({categories.find(c => c.key === asm.category)?.name})</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              ) : (
               <table className={tableStyles.table}>
                 <thead className={tableStyles.thead} style={{ background: '#f5f5f5' }}>
                   <tr>
@@ -551,6 +628,7 @@ export default function AdminReportsPage() {
                   ))}
                 </tbody>
               </table>
+              )}
             </div>
 
             {/* Document Footer Signature lines (Only visible on print) */}
