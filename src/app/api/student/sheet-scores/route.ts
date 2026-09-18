@@ -1,3 +1,5 @@
+﻿export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 // src/app/api/student/sheet-scores/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -25,7 +27,7 @@ async function findMyRow(sheetId: string, studentCode: string) {
     return c.f ?? (c.v !== null && c.v !== undefined ? String(c.v) : "");
   };
 
-  const title = getCell(table.rows[0], 0).trim() || "สรุปคะแนน";
+  const title = getCell(table.rows[0], 0).trim() || "à¸ªà¸£à¸¸à¸›à¸„à¸°à¹à¸™à¸™";
 
   for (let i = 0; i < table.rows.length; i++) {
     const r = table.rows[i];
@@ -51,14 +53,14 @@ async function findMyRow(sheetId: string, studentCode: string) {
 export async function GET() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
-  if (!token) return NextResponse.json({ success: false, error: "ไม่มีสิทธิ์" }, { status: 401 });
+  if (!token) return NextResponse.json({ success: false, error: "à¹„à¸¡à¹ˆà¸¡à¸µà¸ªà¸´à¸—à¸˜à¸´à¹Œ" }, { status: 401 });
 
   const user = verifyToken(token);
-  if (!user || user.role !== "student") return NextResponse.json({ success: false, error: "ไม่มีสิทธิ์" }, { status: 401 });
+  if (!user || user.role !== "student") return NextResponse.json({ success: false, error: "à¹„à¸¡à¹ˆà¸¡à¸µà¸ªà¸´à¸—à¸˜à¸´à¹Œ" }, { status: 401 });
 
   const db = await readDb();
   const studentUser = db.users.find((u) => u.id === user.id);
-  if (!studentUser?.student_id) return NextResponse.json({ success: false, error: "ไม่พบข้อมูลนักเรียน" }, { status: 404 });
+  if (!studentUser?.student_id) return NextResponse.json({ success: false, error: "à¹„à¸¡à¹ˆà¸žà¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸™à¸±à¸à¹€à¸£à¸µà¸¢à¸™" }, { status: 404 });
 
   const subjectsWithSheet = db.subjects.filter((s) => s.sheet_url);
   if (subjectsWithSheet.length === 0) return NextResponse.json({ success: true, scores: [] });
@@ -79,3 +81,4 @@ export async function GET() {
 
   return NextResponse.json({ success: true, scores });
 }
+
