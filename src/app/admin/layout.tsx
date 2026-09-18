@@ -7,7 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, BookOpen, School, Users, 
   FileSpreadsheet, ClipboardList, BarChart3, Settings, 
-  LogOut, Menu, X, Sun, Moon, CheckSquare, AlertCircle
+  LogOut, Menu, X, Sun, Moon, CheckSquare, AlertCircle, Upload
 } from 'lucide-react';
 import { Logo } from '@/components/Logo';
 import { useApp } from '@/context/AppContext';
@@ -79,6 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { name: 'บันทึกคะแนน', path: '/admin/scores', icon: <FileSpreadsheet size={20} /> },
     { name: 'รายงานผล (Reports)', path: '/admin/reports', icon: <BarChart3 size={20} /> },
     { name: 'สรุปงานค้าง', path: '/admin/missing', icon: <AlertCircle size={20} /> },
+    { name: 'นำเข้าคะแนน (Excel)', path: '/admin/import-scores', icon: <Upload size={20} /> },
     { name: 'ตั้งค่าระบบ', path: '/admin/settings', icon: <Settings size={20} /> },
   ];
 
