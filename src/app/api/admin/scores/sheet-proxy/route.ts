@@ -1,4 +1,4 @@
-﻿// src/app/api/admin/scores/sheet-proxy/route.ts
+// src/app/api/admin/scores/sheet-proxy/route.ts
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifyToken } from "@/lib/auth-token";
@@ -36,10 +36,10 @@ async function fetchSheetData(sheetId: string) {
     return c.f ?? (c.v !== null && c.v !== undefined ? String(c.v) : "");
   };
 
-  const title = getCell(table.rows[0], 0).trim();
+  const title = getCell(table.rows[0], 0).trim() || "สรุปคะแนน";
   const rows = [];
 
-  for (let i = 2; i < table.rows.length; i++) {
+  for (let i = 0; i < table.rows.length; i++) {
     const r = table.rows[i];
     const code = getCell(r, 1).trim();
     if (!code || isNaN(Number(code))) continue;
