@@ -20,6 +20,7 @@ export interface Subject {
   id: string;
   name: string;
   code: string;
+  sheet_url?: string; // Google Sheet URL สำหรับดูคะแนน
 }
 
 export interface Classroom {

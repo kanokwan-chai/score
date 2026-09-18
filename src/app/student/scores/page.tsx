@@ -1,350 +1,166 @@
-// src/app/student/scores/page.tsx
-'use client';
+﻿// src/app/student/scores/page.tsx
+"use client";
+import React, { useState, useEffect } from "react";
+import { BookOpen, TrendingUp, AlertCircle } from "lucide-react";
+import styles from "./scores.module.css";
 
-import React, { useState, useEffect } from 'react';
-import { Search, AlertCircle, Info, Calendar, MessageSquare, Award } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import styles from '../../admin/subjects/subjects.module.css'; // Reuse table stylesheet
-
-interface StudentScore {
-  id: string;
-  assignment_title: string;
-  assignment_type: 'Quiz' | 'Assignment' | 'Homework' | 'Lab' | 'Project' | 'Midterm' | 'Final';
-  category: 'assignment' | 'quiz' | 'behavior' | 'final';
-  full_score: number;
-  keep_score: number;
-  due_date: string;
-  raw_score: number; // -1 means ungraded
-  calculated_score: number;
-  feedback: string;
-  graded_date: string;
+interface SubjectScore {
+  subject_id: string;
   subject_name: string;
   subject_code: string;
+  sheet_title: string;
+  student_code: string;
+  first_name: string;
+  last_name: string;
+  classroom: string;
+  assignment: number;
+  quiz: number;
+  final: number;
+  behavior: number;
+  total: number;
+  grade: string;
 }
 
-export default function StudentScoresPage() {
-  const { showToast } = useApp();
-  
-  const [scores, setScores] = useState<StudentScore[]>([]);
-  const [subjects, setSubjects] = useState<string[]>([]);
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('all');
-  const [isLoading, setIsLoading] = useState(true);
+const GRADE_COLOR: Record<string, string> = {
+  "4.0":"#10B981","4.00":"#10B981","3.5":"#34D399","3.50":"#34D399",
+  "3.0":"#6EE7B7","3.00":"#6EE7B7","2.5":"#FCD34D","2.50":"#FCD34D",
+  "2.0":"#FBBF24","2.00":"#FBBF24","1.5":"#F97316","1.50":"#F97316",
+  "1.0":"#EF4444","1.00":"#EF4444","0.0":"#6B7280","0.00":"#6B7280",
+};
+const gc = (g: string) => GRADE_COLOR[g] || "#6B7280";
 
-  // Load student scores
-  const loadScores = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/student/scores');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setScores(data.scores);
-          
-          // Extract unique subjects
-          const uniqueSubj = Array.from(new Set(data.scores.map((s: StudentScore) => `${s.subject_code} - ${s.subject_name}`))) as string[];
-          setSubjects(uniqueSubj);
-          if (uniqueSubj.length > 0) {
-            setSubjectFilter(uniqueSubj[0]);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Load student scores error:', error);
-      showToast('เกิดข้อผิดพลาดในการโหลดสมุดคะแนน', 'danger');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const GRADE_BG: Record<string, string> = {
+  "4.0":"linear-gradient(135deg,#10B981,#059669)",
+  "4.00":"linear-gradient(135deg,#10B981,#059669)",
+  "3.5":"linear-gradient(135deg,#34D399,#10B981)",
+  "3.50":"linear-gradient(135deg,#34D399,#10B981)",
+  "3.0":"linear-gradient(135deg,#6EE7B7,#34D399)",
+  "3.00":"linear-gradient(135deg,#6EE7B7,#34D399)",
+  "2.5":"linear-gradient(135deg,#FCD34D,#F59E0B)",
+  "2.50":"linear-gradient(135deg,#FCD34D,#F59E0B)",
+  "2.0":"linear-gradient(135deg,#FBBF24,#F59E0B)",
+  "2.00":"linear-gradient(135deg,#FBBF24,#F59E0B)",
+  "1.5":"linear-gradient(135deg,#F97316,#EA580C)",
+  "1.50":"linear-gradient(135deg,#F97316,#EA580C)",
+  "1.0":"linear-gradient(135deg,#EF4444,#DC2626)",
+  "1.00":"linear-gradient(135deg,#EF4444,#DC2626)",
+  "0.0":"linear-gradient(135deg,#9CA3AF,#6B7280)",
+  "0.00":"linear-gradient(135deg,#9CA3AF,#6B7280)",
+};
+const gbg = (g: string) => GRADE_BG[g] || "linear-gradient(135deg,#9CA3AF,#6B7280)";
+
+export default function StudentScoresPage() {
+  const [scores, setScores] = useState<SubjectScore[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadScores();
+    fetch("/api/student/sheet-scores")
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setScores(d.scores as SubjectScore[]);
+        else setError(d.error || "เกิดข้อผิดพลาด");
+      })
+      .catch(() => setError("ไม่สามารถโหลดคะแนนได้"))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  // Filter scores
-  const filteredScores = scores.filter(score => {
-    const matchesSearch = 
-      score.assignment_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      score.subject_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      score.subject_code.toLowerCase().includes(searchQuery.toLowerCase());
-      
-    const matchesSubject = 
-      subjectFilter === 'all' || 
-      `${score.subject_code} - ${score.subject_name}` === subjectFilter;
+  if (isLoading) return (
+    <div style={{ textAlign:"center", padding:"60px 20px" }}>
+      <div style={{ width:"36px", height:"36px", border:"4px solid rgba(99,102,241,0.15)",
+        borderTopColor:"var(--primary)", borderRadius:"50%", animation:"spin 1s linear infinite", margin:"0 auto 16px" }} />
+      <p style={{ color:"var(--text-sub)" }}>กำลังโหลดคะแนน...</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
-    return matchesSearch && matchesSubject;
-  });
+  if (error) return (
+    <div className="glass-card text-center" style={{ padding:"48px 24px" }}>
+      <AlertCircle size={44} color="var(--danger)" style={{ margin:"0 auto 12px" }} />
+      <h3 style={{ color:"var(--text-main)" }}>โหลดคะแนนไม่ได้</h3>
+      <p style={{ color:"var(--text-sub)" }}>{error}</p>
+    </div>
+  );
 
-  // Calculate dynamic category-weighted summaries (matching backend formula)
-  const getWeightedSummaries = () => {
-    const categoryWeights = {
-      assignment: 30,
-      quiz: 20,
-      behavior: 20,
-      final: 30
-    };
-
-    let totalEarnedWeight = 0;
-    let totalWeightMax = 0;
-
-    const catData: Record<string, { earned: number; max: number; hasAssignments: boolean }> = {
-      assignment: { earned: 0, max: 30, hasAssignments: false },
-      quiz: { earned: 0, max: 20, hasAssignments: false },
-      behavior: { earned: 0, max: 20, hasAssignments: false },
-      final: { earned: 0, max: 30, hasAssignments: false }
-    };
-
-    (Object.keys(categoryWeights) as Array<keyof typeof categoryWeights>).forEach(catKey => {
-      const catScores = filteredScores.filter(s => s.category === catKey);
-      let catFullSum = 0;
-      let catRawSum = 0;
-      
-      catScores.forEach(s => {
-        catFullSum += s.full_score;
-        if (s.raw_score !== -1) {
-          catRawSum += s.raw_score;
-        }
-      });
-
-      const weight = categoryWeights[catKey];
-      const hasAssignments = catScores.length > 0;
-      const earned = catFullSum > 0 ? (catRawSum / catFullSum) * weight : 0;
-
-      catData[catKey] = {
-        earned: Math.round(earned * 100) / 100,
-        max: weight,
-        hasAssignments
-      };
-
-      if (hasAssignments) {
-        totalWeightMax += weight;
-        totalEarnedWeight += earned;
-      }
-    });
-
-    return {
-      catData,
-      totalEarnedWeight: Math.round(totalEarnedWeight * 100) / 100,
-      totalWeightMax
-    };
-  };
-
-  const { catData, totalEarnedWeight, totalWeightMax } = getWeightedSummaries();
-
-  const getTypeName = (t: StudentScore['assignment_type']) => {
-    const types: Record<StudentScore['assignment_type'], string> = {
-      Quiz: 'แบบทดสอบ (Quiz)',
-      Assignment: 'งานมอบหมาย (Assignment)',
-      Homework: 'การบ้าน (Homework)',
-      Lab: 'งานทดลอง (Lab)',
-      Project: 'โครงงาน (Project)',
-      Midterm: 'สอบกลางภาค (Midterm)',
-      Final: 'สอบปลายภาค (Final)'
-    };
-    return types[t] || t;
-  };
+  if (scores.length === 0) return (
+    <div className="glass-card text-center" style={{ padding:"60px 24px" }}>
+      <BookOpen size={52} color="var(--text-sub)" style={{ margin:"0 auto 16px" }} />
+      <h3 style={{ color:"var(--text-main)", marginBottom:"8px" }}>ยังไม่มีข้อมูลคะแนน</h3>
+      <p style={{ color:"var(--text-sub)" }}>ครูยังไม่ได้เพิ่มคะแนนให้วิชานี้ กรุณารอสักครู่</p>
+    </div>
+  );
 
   return (
     <div className="animate-fade-in">
-      {/* Filters Area */}
-      <div className={styles.headerActions}>
-        <div style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap' }}>
-          <div className={styles.searchBar}>
-            <Search size={18} className={styles.searchIcon} />
-            <input
-              type="text"
-              className={styles.searchInput}
-              placeholder="ค้นหาตามชื่องาน หรือวิชาเรียน..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <select
-            className={styles.searchInput}
-            style={{ maxWidth: '200px', paddingLeft: '14px', cursor: 'pointer' }}
-            value={subjectFilter}
-            onChange={(e) => setSubjectFilter(e.target.value)}
-          >
-            <option value="all">รายวิชาทั้งหมด</option>
-            {subjects.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+      <div style={{ marginBottom:"28px" }}>
+        <h2 style={{ fontWeight:800, fontSize:"1.5rem", color:"var(--text-main)", margin:0, display:"flex", alignItems:"center", gap:"10px" }}>
+          <TrendingUp size={26} color="var(--primary)" /> คะแนนและเกรดของฉัน
+        </h2>
+        <p style={{ color:"var(--text-sub)", marginTop:"6px", fontSize:"0.9rem" }}>
+          {scores[0]?.first_name} {scores[0]?.last_name} &nbsp;|&nbsp; {scores[0]?.classroom}
+        </p>
       </div>
 
-      {/* Scores Table */}
-      {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '50px' }}>
-          <div style={{
-            width: '35px',
-            height: '35px',
-            border: '4px solid rgba(79, 70, 229, 0.1)',
-            borderRadius: '50%',
-            borderTopColor: 'var(--primary)',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 12px'
-          }} />
-          <p className="text-muted">กำลังดึงข้อมูลสมุดคะแนนสอบส่วนตัว...</p>
-        </div>
-      ) : subjectFilter === 'all' ? (
-        <div className="glass-card text-center" style={{ padding: '40px 20px' }}>
-          <AlertCircle size={40} style={{ margin: '0 auto 12px', color: 'var(--primary)' }} />
-          <h3>กรุณาเลือกรายวิชา</h3>
-          <p className="text-muted">โปรดเลือกรายวิชาที่คุณต้องการตรวจสอบคะแนนจากเมนูด้านบน เพื่อดูรายงานแยกตามหมวดหมู่คะแนนสะสมค่ะ</p>
-        </div>
-      ) : filteredScores.length === 0 ? (
-        <div className={`${styles.tableContainer} ${styles.emptyState}`}>
-          <AlertCircle size={40} style={{ margin: '0 auto 12px', color: 'var(--text-sub)' }} />
-          <h3>ไม่พบข้อมูลคะแนน</h3>
-          <p>ยังไม่มีรายการบันทึกคะแนนสะสมในวิชานี้</p>
-        </div>
-      ) : (
-        <div>
-          {/* ส่วนแสดงคะแนนสะสมรวมวิชานี้ */}
-          <div className="glass-card" style={{ 
-            padding: '20px', 
-            marginBottom: '24px', 
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(79, 70, 229, 0.03) 100%)',
-            border: '1px solid rgba(99, 102, 241, 0.15)',
-            borderRadius: 'var(--radius-md)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '16px'
-          }}>
-            <div>
-              <h3 style={{ margin: 0, fontWeight: 700, color: 'var(--text-main)', fontSize: '1.25rem' }}>
-                สรุปคะแนนสะสมวิชา: {subjectFilter}
-              </h3>
-              <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-sub)' }}>
-                คะแนนจะถูกปรับปรุงอัตโนมัติทันทีที่มีการตรวจประเมินผลสัมฤทธิ์
-              </p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-sub)', fontWeight: 600 }}>คะแนนสะสมสัดส่วนวิชานี้:</span>
-              <div style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1.1 }}>
-                {totalEarnedWeight.toFixed(2)}
-                <span style={{ fontSize: '1rem', color: 'var(--text-sub)', fontWeight: 500 }}> / {totalWeightMax} คะแนนสัดส่วนทั้งหมด</span>
+      {/* Cards per subject */}
+      <div style={{ display:"flex", flexDirection:"column", gap:"20px" }}>
+        {scores.map(s => (
+          <div key={s.subject_id} className="glass-card animate-fade-in" style={{ padding:0, overflow:"hidden", borderRadius:"16px" }}>
+
+            {/* Header strip */}
+            <div style={{ padding:"18px 24px", background:"rgba(99,102,241,0.05)",
+              borderBottom:"1px solid rgba(99,102,241,0.1)", display:"flex",
+              justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:"12px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                <div style={{ width:"38px", height:"38px", borderRadius:"10px",
+                  background:"var(--primary)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <BookOpen size={20} color="#fff" />
+                </div>
+                <div>
+                  <div style={{ fontWeight:800, fontSize:"1rem", color:"var(--text-main)" }}>{s.subject_code} — {s.subject_name}</div>
+                  <div style={{ fontSize:"0.78rem", color:"var(--text-sub)", marginTop:"2px" }}>{s.sheet_title || "ตัดเกรด"}</div>
+                </div>
+              </div>
+              {/* Grade badge big */}
+              <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ fontSize:"0.75rem", color:"var(--text-sub)", marginBottom:"2px" }}>คะแนนรวม</div>
+                  <div style={{ fontWeight:800, fontSize:"1.5rem", color:"var(--primary)" }}>{s.total}<span style={{ fontSize:"0.85rem", fontWeight:400, color:"var(--text-sub)" }}>/100</span></div>
+                </div>
+                <div style={{ width:"60px", height:"60px", borderRadius:"12px",
+                  background: gbg(s.grade),
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  boxShadow:"0 4px 12px " + gc(s.grade) + "40" }}>
+                  <span style={{ color:"#fff", fontWeight:900, fontSize:"1.2rem" }}>{s.grade}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* ตารางแยก 4 หมวดหมู่ตามสัดส่วน */}
-          {[
-            { key: 'assignment', name: 'งานที่มอบหมาย (สัดส่วนน้ำหนัก 30%)', weight: 30, color: '#777777' },
-            { key: 'quiz', name: 'แบบทดสอบ (สัดส่วนน้ำหนัก 20%)', weight: 20, color: '#4F46E5' },
-            { key: 'behavior', name: 'จิตพิสัย (สัดส่วนน้ำหนัก 20%)', weight: 20, color: '#10B981' },
-            { key: 'final', name: 'สอบปลายภาค (สัดส่วนน้ำหนัก 30%)', weight: 30, color: '#EF4444' }
-          ].map(cat => {
-            const catScores = filteredScores.filter(s => s.category === cat.key);
-            const { earned, max } = catData[cat.key] || { earned: 0, max: cat.weight };
-
-            return (
-              <div key={cat.key} style={{ marginBottom: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid rgba(0, 0, 0, 0.08)' }}>
-                {/* หัวข้อหมวดหมู่ */}
-                <div style={{
-                  background: cat.color,
-                  color: '#fff',
-                  padding: '14px 20px',
-                  fontWeight: 700,
-                  fontSize: '1rem',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '10px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Award size={16} />
-                    <span>{cat.name}</span>
+            {/* Score breakdown */}
+            <div style={{ padding:"20px 24px", display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:"16px" }}>
+              {[
+                { label:"งาน", value:s.assignment, max:30, color:"#6366F1" },
+                { label:"สอบย่อย", value:s.quiz, max:20, color:"#8B5CF6" },
+                { label:"ปลายภาค", value:s.final, max:30, color:"#EC4899" },
+                { label:"จิตพิสัย", value:s.behavior, max:20, color:"#14B8A6" },
+              ].map(cat => (
+                <div key={cat.label} style={{ background:"var(--bg-card)", borderRadius:"12px",
+                  padding:"14px 16px", border:"1px solid rgba(0,0,0,0.05)" }}>
+                  <div style={{ fontSize:"0.78rem", color:"var(--text-sub)", marginBottom:"6px" }}>{cat.label}</div>
+                  <div style={{ fontWeight:800, fontSize:"1.4rem", color:cat.color }}>
+                    {cat.value}
+                    <span style={{ fontSize:"0.8rem", fontWeight:400, color:"var(--text-sub)" }}>/{cat.max}</span>
                   </div>
-                  <div style={{ fontSize: '0.9rem', background: 'rgba(255, 255, 255, 0.25)', padding: '4px 12px', borderRadius: '20px' }}>
-                    สัดส่วนหมวดที่ได้ {earned.toFixed(2)} / {max} คะแนน
+                  {/* Progress bar */}
+                  <div style={{ marginTop:"8px", height:"4px", background:"rgba(0,0,0,0.07)", borderRadius:"2px" }}>
+                    <div style={{ height:"100%", borderRadius:"2px", width:`${Math.min(100,(cat.value/cat.max)*100)}%`,
+                      background:cat.color, transition:"width 0.6s ease" }} />
                   </div>
                 </div>
-
-                {/* ตารางงานในหมวดหมู่ */}
-                {catScores.length === 0 ? (
-                  <div style={{ 
-                    padding: '24px', 
-                    textAlign: 'center', 
-                    color: 'var(--text-sub)', 
-                    background: 'var(--bg-card)', 
-                    fontSize: '0.9rem',
-                    fontStyle: 'italic'
-                  }}>
-                    ยังไม่มีรายการในหมวดหมู่นี้
-                  </div>
-                ) : (
-                  <div className={styles.tableContainer} style={{ margin: 0, borderRadius: 0, border: 'none' }}>
-                    <table className={styles.table}>
-                      <thead className={styles.thead}>
-                        <tr>
-                          <th className={styles.th} style={{ width: '60px' }}>ลำดับ</th>
-                          <th className={styles.th}>ชื่องานที่มอบหมาย</th>
-                          <th className={styles.th} style={{ width: '150px' }}>ประเภทงาน</th>
-                          <th className={styles.th} style={{ width: '150px', textAlign: 'center' }}>คะแนนดิบที่ได้</th>
-                          <th className={styles.th} style={{ width: '120px' }}>วันที่ส่งตรวจ</th>
-                          <th className={styles.th}>ข้อสะท้อนกลับของอาจารย์ (Feedback)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {catScores.map((score, index) => (
-                          <tr key={score.id} className={styles.tr}>
-                            <td className={styles.td}>{index + 1}</td>
-                            <td className={styles.td} style={{ fontWeight: 600, color: 'var(--text-main)' }}>
-                              {score.assignment_title}
-                            </td>
-                            <td className={styles.td} style={{ fontSize: '0.85rem' }}>
-                              {getTypeName(score.assignment_type)}
-                            </td>
-                            <td className={styles.td} style={{ textAlign: 'center' }}>
-                              {score.raw_score === -1 ? (
-                                <span style={{ color: 'var(--danger)', fontStyle: 'italic', fontSize: '0.85rem', fontWeight: 500 }}>
-                                  ค้างส่ง/ยังไม่ตรวจ
-                                </span>
-                              ) : (
-                                <div>
-                                  <strong style={{ fontSize: '1rem', color: 'var(--text-main)' }}>{score.raw_score}</strong>
-                                  <span style={{ fontSize: '0.8rem', color: 'var(--text-sub)' }}> / {score.full_score}</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className={styles.td} style={{ fontSize: '0.85rem' }}>
-                              {score.raw_score === -1 ? (
-                                <span className="text-muted">-</span>
-                              ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                  <Calendar size={13} className="text-muted" />
-                                  <span>{new Date(score.graded_date).toLocaleDateString('th-TH')}</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className={styles.td} style={{ fontSize: '0.85rem' }}>
-                              {score.feedback ? (
-                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                                  <MessageSquare size={13} color="var(--primary)" style={{ marginTop: '2px', flexShrink: 0 }} />
-                                  <span style={{ fontWeight: 500 }}>{score.feedback}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted" style={{ fontStyle: 'italic' }}>-</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
