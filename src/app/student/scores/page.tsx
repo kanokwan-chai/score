@@ -1,6 +1,4 @@
-﻿export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-// src/app/student/scores/page.tsx
+﻿// src/app/student/scores/page.tsx
 "use client";
 import React, { useState, useEffect } from "react";
 import { BookOpen, AlertCircle, Star } from "lucide-react";
@@ -161,4 +159,5 @@ export default function StudentScoresPage() {
     </div>
   );
 }
+
 
