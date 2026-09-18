@@ -8,39 +8,53 @@ async function checkAuth() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session_token")?.value;
   if (!token) return null;
-  const user = verifyToken(token);
-  if (!user) return null;
-  return user;
+  return verifyToken(token);
 }
 
-function sheetIdToCSV(url: string): string {
+function extractSheetId(url: string): string {
   const m = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
-  if (!m) return "";
-  return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv`;
+  return m ? m[1] : "";
 }
 
-function parseCSVText(text: string) {
-  // strip BOM if present
-  const clean = text.replace(/^\uFEFF/, "");
-  const lines = clean.split(/\r?\n/);
-  const title = lines[0]?.split(",")[0]?.trim() ?? "";
+// Use Google Visualization (gviz) JSON API — handles Unicode correctly
+async function fetchSheetData(sheetId: string) {
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+  const res = await fetch(gvizUrl, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const raw = await res.text();
+  // Strip JSONP wrapper: /*O_o*/\ngoogle.visualization.Query.setResponse({...});
+  const jsonStr = raw.replace(/^[^(]+\(/, "").replace(/\);?\s*$/, "");
+  const data = JSON.parse(jsonStr);
+
+  if (data.status !== "ok") throw new Error("gviz error: " + data.status);
+
+  const table = data.table;
+  // row 0 = ชื่อวิชา (from cell A1), row 1 = header, row 2+ = student data
+  const getCell = (row: any, col: number): string => {
+    const c = row?.c?.[col];
+    if (!c) return "";
+    return c.f ?? (c.v !== null && c.v !== undefined ? String(c.v) : "");
+  };
+
+  const title = getCell(table.rows[0], 0).trim();
   const rows = [];
-  for (let i = 2; i < lines.length; i++) {
-    const cols = lines[i].split(",");
-    const code = (cols[1] ?? "").trim();
+
+  for (let i = 2; i < table.rows.length; i++) {
+    const r = table.rows[i];
+    const code = getCell(r, 1).trim();
     if (!code || isNaN(Number(code))) continue;
     rows.push({
-      no: Number(cols[0]) || i - 1,
+      no: Number(getCell(r, 0)) || i - 1,
       student_code: code,
-      first_name: (cols[2] ?? "").trim(),
-      last_name: (cols[3] ?? "").trim(),
-      classroom: (cols[4] ?? "").trim(),
-      assignment: Number(cols[5]) || 0,
-      quiz: Number(cols[6]) || 0,
-      final: Number(cols[7]) || 0,
-      behavior: Number(cols[8]) || 0,
-      total: Number(cols[9]) || 0,
-      grade: (cols[10] ?? "").trim(),
+      first_name: getCell(r, 2).trim(),
+      last_name: getCell(r, 3).trim(),
+      classroom: getCell(r, 4).trim(),
+      assignment: Number(getCell(r, 5)) || 0,
+      quiz: Number(getCell(r, 6)) || 0,
+      final: Number(getCell(r, 7)) || 0,
+      behavior: Number(getCell(r, 8)) || 0,
+      total: Number(getCell(r, 9)) || 0,
+      grade: getCell(r, 10).trim(),
     });
   }
   return { title, rows };
@@ -61,24 +75,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: "วิชานี้ยังไม่มี Google Sheet URL" }, { status: 404 });
   }
 
-  const csvUrl = sheetIdToCSV(subject.sheet_url);
-  if (!csvUrl) return NextResponse.json({ success: false, error: "URL ไม่ถูกต้อง" }, { status: 400 });
+  const sheetId = extractSheetId(subject.sheet_url);
+  if (!sheetId) return NextResponse.json({ success: false, error: "URL ไม่ถูกต้อง" }, { status: 400 });
 
   try {
-    const res = await fetch(csvUrl, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    // decode explicitly as UTF-8 to avoid mojibake
-    const buf = await res.arrayBuffer();
-    const text = new TextDecoder("utf-8").decode(buf);
-    const { title, rows } = parseCSVText(text);
+    const { title, rows } = await fetchSheetData(sheetId);
     return NextResponse.json({ success: true, title, rows, subject_name: subject.name, subject_code: subject.code });
   } catch (e) {
     console.error("sheet-proxy error:", e);
-    return NextResponse.json({ success: false, error: "ดึงข้อมูลจาก Google Sheet ไม่ได้ ตรวจสอบ URL และสิทธิ์การแชร์" }, { status: 502 });
+    return NextResponse.json({ success: false, error: "ดึงข้อมูลจาก Google Sheet ไม่ได้ ตรวจสอบ URL และสิทธิ์การแชร์ (Anyone with the link)" }, { status: 502 });
   }
 }
 
-// PATCH — save sheet_url for a subject
+// PATCH — save sheet_url
 export async function PATCH(request: Request) {
   const user = await checkAuth();
   if (!user || user.role !== "admin") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
