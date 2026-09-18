@@ -1,1142 +1,442 @@
-'use client';
+﻿// src/app/admin/scores/page.tsx
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Save, FileText, AlertTriangle, BookOpen, Users, HelpCircle, Info, Upload } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
-import * as XLSX from 'xlsx';
-import styles from './scores.module.css';
-import tableStyles from '../subjects/subjects.module.css'; // Shared table styles
+import React, { useState, useRef } from "react";
+import {
+  Upload, Save, Search, FileSpreadsheet, CheckCircle,
+  Info, Printer, Download
+} from "lucide-react";
+import * as XLSX from "xlsx";
+import { useApp } from "@/context/AppContext";
+import filterStyles from "./scores.module.css";
+import tableStyles from "../subjects/subjects.module.css";
 
-interface Subject {
-  id: string;
-  name: string;
-  code: string;
-}
+// ————————————————————————————————
+// Types
+// ————————————————————————————————
+interface Subject { id: string; name: string; code: string; }
+interface Classroom { id: string; name: string; }
 
-interface Classroom {
-  id: string;
-  name: string;
-}
-
-interface Assignment {
-  id: string;
-  subject_id: string;
-  title: string;
-  type: string;
-  category: 'assignment' | 'quiz' | 'behavior' | 'final';
-  full_score: number;
-  keep_score: number;
-  due_date: string;
-  classroom: string;
-}
-
-interface StudentScoreInput {
-  student_id: string;
+interface ScoreRow {
+  no: number;
   student_code: string;
   first_name: string;
   last_name: string;
-  score_id: string;
-  raw_score: number;
-  calculated_score: number;
-  feedback: string;
-  note: string;
-  overall_keep_sum: number;
-  overall_keep_max: number;
-  overall_grade: string;
-  overall_percentage: number;
+  classroom: string;
+  assignment: number;   // งาน 30
+  quiz: number;         // สอบย่อย 20
+  final: number;        // ปลายภาค 30
+  behavior: number;     // จิตพิสัย 20
+  total: number;
+  grade: string;
 }
 
+// คอลัมน์ตามชีตของครู (0-index)
+// row 0 = ชื่อวิชา, row 1 = header, row 2+ = ข้อมูล
+const COL = {
+  no:         0,
+  studentCode: 1,
+  firstName:  2,
+  lastName:   3,
+  classroom:  4,
+  assignment: 5,
+  quiz:       6,
+  final:      7,
+  behavior:   8,
+  total:      9,
+  grade:      10,
+};
+
+const GRADE_COLORS: Record<string, string> = {
+  "4.00": "#10B981",
+  "3.50": "#34D399",
+  "3.00": "#6EE7B7",
+  "2.50": "#FCD34D",
+  "2.00": "#FBBF24",
+  "1.50": "#F97316",
+  "1.00": "#EF4444",
+  "0.00": "#6B7280",
+};
+
+function gradeColor(grade: string) {
+  return GRADE_COLORS[grade] || "#6B7280";
+}
+
+// ————————————————————————————————
+// Page
+// ————————————————————————————————
 export default function AdminScoresPage() {
   const { showToast } = useApp();
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
-
-  // Selected filters
-  const [selectedSubject, setSelectedSubject] = useState('');
-  const [selectedClassroom, setSelectedClassroom] = useState('');
-  const [selectedAssignment, setSelectedAssignment] = useState('');
-
-  // Loaded Score Table data
-  const [assignmentInfo, setAssignmentInfo] = useState<{ full_score: number; keep_score: number; category: string } | null>(null);
-  const [studentScores, setStudentScores] = useState<StudentScoreInput[]>([]);
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoadingFilters, setIsLoadingFilters] = useState(true);
-  const [isLoadingScores, setIsLoadingScores] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const [sheetTitle, setSheetTitle] = useState("");
+  const [rows, setRows] = useState<ScoreRow[]>([]);
+  const [search, setSearch] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [savedOk, setSavedOk] = useState(false);
 
-  const scoreFileInputRef = useRef<HTMLInputElement>(null);
-  const [excelDataRows, setExcelDataRows] = useState<any[][]>([]);
-  const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
-  const [selectedExcelCol, setSelectedExcelCol] = useState<number>(-1);
-  const [showColSelector, setShowColSelector] = useState(false);
-  const [studentIdColIdx, setStudentIdColIdx] = useState<number>(0);
-  const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
-  const [pastedScoresText, setPastedScoresText] = useState('');
-  const [activeTab, setActiveTab] = useState<'individual' | 'categories'>('individual');
-  const [categorySummaryData, setCategorySummaryData] = useState<any[]>([]);
-  const [isCategorySummaryLoading, setIsCategorySummaryLoading] = useState(false);
-
-  const handleExcelScoreImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !assignmentInfo) return;
-
+  // ————————————————————————————————
+  // Parse file
+  // ————————————————————————————————
+  const parseFile = (file: File) => {
+    setFileName(file.name);
+    setSavedOk(false);
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    reader.onload = (e) => {
+      const data = new Uint8Array(e.target?.result as ArrayBuffer);
+      const wb = XLSX.read(data, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
-        if (rows.length < 2) {
-          showToast('ไม่พบข้อมูลที่ต้องการในไฟล์ Excel', 'warning');
-          return;
-        }
+      // แถว 0 = ชื่อวิชา
+      const title = String(raw[0]?.[0] ?? "").trim();
+      setSheetTitle(title);
 
-        // คลีนรายชื่อคอลัมน์เพื่อจัดพรีวิว
-        const rawHeaders = rows[0].map(h => String(h || '').trim());
-        const headersLower = rawHeaders.map(h => h.toLowerCase());
-        
-        // ค้นหาคอลัมน์รหัสประจำตัวเด็กนักเรียน
-        let idIdx = headersLower.findIndex(h => h.includes('รหัส') || h.includes('id') || h.includes('code') || h.includes('student'));
-        if (idIdx === -1) idIdx = 1; // ค่าตั้งต้นเป็นคอลัมน์ที่ 2 (ดัชนี 1) ของตารางครู
+      const parsed: ScoreRow[] = [];
+      for (let i = 2; i < raw.length; i++) {
+        const r = raw[i] as unknown[];
+        const code = String(r[COL.studentCode] ?? "").trim();
+        if (!code || isNaN(Number(code))) continue;
 
-        setStudentIdColIdx(idIdx);
-        setExcelHeaders(rawHeaders);
-        setExcelDataRows(rows);
+        const assignment = Number(r[COL.assignment]);
+        const quiz       = Number(r[COL.quiz]);
+        const fin        = Number(r[COL.final]);
+        const behavior   = Number(r[COL.behavior]);
+        const total      = Number(r[COL.total]);
+        const grade      = String(r[COL.grade] ?? "").trim();
 
-        // ทดลองจับคู่หาชิ้นงานที่ตรงกันล่วงหน้าอัตโนมัติ
-        const targetTitle = allAssignments.find(a => a.id === selectedAssignment)?.title || '';
-        let matchedColIdx = -1;
-
-        if (targetTitle) {
-          matchedColIdx = rawHeaders.findIndex(h => 
-            h.toLowerCase().includes(targetTitle.toLowerCase()) || 
-            targetTitle.toLowerCase().includes(h.toLowerCase())
-          );
-        }
-
-        // หากยังหาไม่เจอ ให้จับคู่คำทั่วไป
-        if (matchedColIdx === -1) {
-          matchedColIdx = headersLower.findIndex(h => h.includes('คะแนน') || h.includes('score') || h.includes('point') || h.includes('raw'));
-        }
-
-        // ค่าตั้งต้นฉุกเฉินกรณีไม่พบคีย์เวิร์ด
-        if (matchedColIdx === -1) {
-          matchedColIdx = rawHeaders.length > 5 ? 5 : 1;
-        }
-
-        setSelectedExcelCol(matchedColIdx);
-        setShowColSelector(true);
-        showToast('กรุณาเลือกคอลัมน์คะแนนที่ต้องการนำเข้าจากเมนูด้านล่างค่ะ', 'info');
-      } catch (error) {
-        console.error('Excel parse error:', error);
-        showToast('ไม่สามารถแยกวิเคราะห์ไฟล์ Excel นี้ได้', 'danger');
-      } finally {
-        if (scoreFileInputRef.current) {
-          scoreFileInputRef.current.value = '';
-        }
+        parsed.push({
+          no:           Number(r[COL.no]) || i - 1,
+          student_code: code,
+          first_name:   String(r[COL.firstName] ?? ""),
+          last_name:    String(r[COL.lastName] ?? ""),
+          classroom:    String(r[COL.classroom] ?? ""),
+          assignment:   isNaN(assignment) ? 0 : assignment,
+          quiz:         isNaN(quiz) ? 0 : quiz,
+          final:        isNaN(fin) ? 0 : fin,
+          behavior:     isNaN(behavior) ? 0 : behavior,
+          total:        isNaN(total) ? 0 : total,
+          grade,
+        });
       }
+
+      setRows(parsed);
+      if (parsed.length === 0) showToast("ไม่พบข้อมูลในไฟล์ กรุณาตรวจสอบรูปแบบชีต", "warning");
+      else showToast(`โหลดข้อมูลสำเร็จ ${parsed.length} คน`, "success");
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
-  const applyExcelScores = () => {
-    if (selectedExcelCol === -1 || excelDataRows.length === 0 || !assignmentInfo) return;
-
-    const importedScoresMap: Record<string, number> = {};
-
-    for (let i = 1; i < excelDataRows.length; i++) {
-      const r = excelDataRows[i];
-      if (!r || r.length === 0) continue;
-
-      const studentCode = String(r[studentIdColIdx] || '').trim();
-      const scoreVal = r[selectedExcelCol];
-
-      if (studentCode && scoreVal !== undefined && scoreVal !== null && scoreVal !== '') {
-        const rawScore = Number(scoreVal);
-        if (!isNaN(rawScore)) {
-          importedScoresMap[studentCode.toLowerCase()] = rawScore;
-        }
-      }
-    }
-
-    let matchCount = 0;
-    const newScores = studentScores.map(student => {
-      const studentCodeLower = student.student_code.toLowerCase();
-      if (importedScoresMap[studentCodeLower] !== undefined) {
-        const raw = importedScoresMap[studentCodeLower];
-        const clampedRaw = Math.max(0, Math.min(assignmentInfo.full_score, raw));
-        const calculated = Math.round(((clampedRaw / assignmentInfo.full_score) * assignmentInfo.keep_score) * 100) / 100;
-        matchCount++;
-        return {
-          ...student,
-          raw_score: clampedRaw,
-          calculated_score: calculated
-        };
-      }
-      return student;
-    });
-
-    if (matchCount === 0) {
-      showToast('ไม่สามารถจับคู่รหัสนักเรียนจากไฟล์ Excel ได้เลย โปรดตรวจสอบคอลัมน์รหัสประจำตัวและตารางห้องเรียนค่ะ', 'warning');
-    } else {
-      setStudentScores(newScores);
-      setShowColSelector(false);
-      showToast(`นำเข้าคะแนนสำเร็จ! จับคู่เด็กได้ ${matchCount} คน กรุณากดตรวจสอบก่อนกดบันทึกคะแนนสะสมจริงค่ะ`, 'success');
-    }
-  };
-
-  // Load initial dropdown data
-  const loadFilters = async () => {
-    setIsLoadingFilters(true);
-    try {
-      // 1. Subjects
-      const subjRes = await fetch('/api/admin/subjects');
-      const subjData = await subjRes.json();
-      if (subjData.success && subjData.subjects.length > 0) {
-        setSubjects(subjData.subjects);
-        setSelectedSubject(subjData.subjects[0].id);
-      }
-
-      // 2. Classrooms
-      const classRes = await fetch('/api/public/classrooms');
-      const classData = await classRes.json();
-      if (classData.success && classData.classrooms.length > 0) {
-        setClassrooms(classData.classrooms);
-        setSelectedClassroom(classData.classrooms[0].name);
-      }
-
-      // 3. All assignments (we will filter locally)
-      const asmRes = await fetch('/api/admin/assignments');
-      const asmData = await asmRes.json();
-      if (asmData.success) {
-        setAllAssignments(asmData.assignments);
-      }
-    } catch (error) {
-      console.error('Load score filters error:', error);
-      showToast('เกิดข้อผิดพลาดในการดึงข้อมูลเริ่มต้น', 'danger');
-    } finally {
-      setIsLoadingFilters(false);
-    }
-  };
-
-  useEffect(() => {
-    loadFilters();
-  }, []);
-
-  // Filter assignments based on subject & classroom selection
-  const filteredAssignments = allAssignments.filter(
-    a => a.subject_id === selectedSubject && a.classroom === selectedClassroom
+  const filteredRows = rows.filter((r) =>
+    r.student_code.includes(search) ||
+    r.first_name.includes(search) ||
+    r.last_name.includes(search)
   );
 
-  // Update selected assignment dropdown when filters change
-  useEffect(() => {
-    if (filteredAssignments.length > 0) {
-      // Select the first assignment in list
-      setSelectedAssignment(filteredAssignments[0].id);
-    } else {
-      setSelectedAssignment('');
-      setStudentScores([]);
-      setAssignmentInfo(null);
-    }
-  }, [selectedSubject, selectedClassroom, allAssignments]);
-
-  // Load scores table when selected assignment changes
-  const loadScoresTable = async () => {
-    if (!selectedAssignment) return;
-    
-    setIsLoadingScores(true);
-    try {
-      const res = await fetch(
-        `/api/admin/scores?subject_id=${selectedSubject}&classroom=${encodeURIComponent(selectedClassroom)}&assignment_id=${selectedAssignment}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setStudentScores(data.studentScores);
-          setAssignmentInfo(data.assignment);
-        } else {
-          showToast(data.error || 'โหลดคะแนนล้มเหลว', 'danger');
-        }
-      }
-    } catch (error) {
-      console.error('Load scores error:', error);
-      showToast('เกิดข้อผิดพลาดในการโหลดคะแนน', 'danger');
-    } finally {
-      setIsLoadingScores(false);
-    }
-  };
-
-  useEffect(() => {
-    loadScoresTable();
-  }, [selectedAssignment]);
-
-  const loadCategorySummary = async () => {
-    if (!selectedSubject || !selectedClassroom) return;
-    setIsCategorySummaryLoading(true);
-    try {
-      const res = await fetch(
-        `/api/admin/reports?subject_id=${selectedSubject}&classroom=${encodeURIComponent(selectedClassroom)}`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          const assignments = data.assignments;
-          const rows = data.reportRows.map((row: any) => {
-            const catSums: Record<string, number> = { assignment: 0, quiz: 0, behavior: 0, final: 0 };
-            const catMaxs: Record<string, number> = { assignment: 30, quiz: 20, behavior: 20, final: 30 };
-            const categoryWeights: Record<string, number> = { assignment: 30, quiz: 20, behavior: 20, final: 30 };
-            
-            // Calculate weighted sum for each category
-            Object.keys(categoryWeights).forEach(catKey => {
-              const catAsms = assignments.filter((a: any) => (a.category || 'assignment') === catKey);
-              let catFullSum = 0;
-              let catRawSum = 0;
-              let hasGraded = false;
-
-              catAsms.forEach((asm: any) => {
-                catFullSum += asm.full_score;
-                const s = row.scores.find((score: any) => score.assignment_id === asm.id);
-                if (s && s.raw_score !== -1) {
-                  catRawSum += s.raw_score;
-                  hasGraded = true;
-                }
-              });
-
-              if (hasGraded && catFullSum > 0) {
-                catSums[catKey] = (catRawSum / catFullSum) * categoryWeights[catKey];
-              }
-            });
-            
-            return {
-              ...row,
-              catSums,
-              catMaxs
-            };
-          });
-          setCategorySummaryData(rows);
-        }
-      }
-    } catch (error) {
-      console.error('Load category summary error:', error);
-      showToast('ไม่สามารถโหลดข้อมูลสรุปหมวดหมู่ได้', 'danger');
-    } finally {
-      setIsCategorySummaryLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab === 'categories') {
-      loadCategorySummary();
-    }
-  }, [activeTab, selectedSubject, selectedClassroom]);
-
-  // Handle client-side score typing & auto-calculation
-  const handleScoreChange = (index: number, val: string) => {
-    if (!assignmentInfo) return;
-
-    const newScores = [...studentScores];
-    
-    if (val === '') {
-      newScores[index].raw_score = -1; // Keep as ungraded
-      newScores[index].calculated_score = 0;
-      setStudentScores(newScores);
-      return;
-    }
-
-    const raw = Number(val);
-    if (isNaN(raw)) return;
-
-    // Clamp score
-    const clampedRaw = Math.max(0, Math.min(assignmentInfo.full_score, raw));
-    
-    // Auto-calculate keep score
-    const calculated = Math.round(((clampedRaw / assignmentInfo.full_score) * assignmentInfo.keep_score) * 100) / 100;
-    
-    newScores[index].raw_score = clampedRaw;
-    newScores[index].calculated_score = calculated;
-    setStudentScores(newScores);
-  };
-
-  const handleFeedbackChange = (index: number, val: string) => {
-    const newScores = [...studentScores];
-    newScores[index].feedback = val;
-    setStudentScores(newScores);
-  };
-
-  const handleNoteChange = (index: number, val: string) => {
-    const newScores = [...studentScores];
-    newScores[index].note = val;
-    setStudentScores(newScores);
-  };
-
-  // Submit all scores
-  const handleSaveScores = async () => {
-    if (!selectedAssignment) return;
-
+  // ————————————————————————————————
+  // Save to DB via import-sheet API
+  // ————————————————————————————————
+  const handleSave = async (subjectId: string, classroom: string) => {
+    if (!subjectId || !classroom) return;
     setIsSaving(true);
     try {
-      const payload = {
-        assignment_id: selectedAssignment,
-        scores: studentScores.map(s => ({
-          score_id: s.score_id,
-          raw_score: s.raw_score,
-          feedback: s.feedback,
-          note: s.note
-        }))
-      };
-
-      const res = await fetch('/api/admin/scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const res = await fetch("/api/admin/scores/import-sheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject_id: subjectId,
+          classroom,
+          rows: rows.map((r) => ({
+            student_code: r.student_code,
+            assignment: r.assignment,
+            quiz: r.quiz,
+            final: r.final,
+            behavior: r.behavior,
+          })),
+        }),
       });
       const data = await res.json();
       if (data.success) {
-        showToast(data.message || 'บันทึกคะแนนและคำนวณเกรดสำเร็จ', 'success');
-        // Reload table to get updated overall subject averages & grades from backend
-        loadScoresTable();
+        setSavedOk(true);
+        showToast(data.message, "success");
       } else {
-        showToast(data.error || 'บันทึกข้อมูลล้มเหลว', 'danger');
+        showToast(data.error || "บันทึกล้มเหลว", "danger");
       }
-    } catch (error) {
-      console.error('Save scores error:', error);
-      showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'danger');
+    } catch {
+      showToast("ระบบผิดพลาด", "danger");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Filter student rows locally by name or student ID
-  const filteredStudentScores = studentScores.filter(
-    s => s.student_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-         s.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-         s.last_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ————————————————————————————————
+  // Save dialog state (subject + classroom selection)
+  // ————————————————————————————————
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [selSubject, setSelSubject] = useState("");
+  const [selClassroom, setSelClassroom] = useState("");
+  const [modalLoaded, setModalLoaded] = useState(false);
 
-  const getCategoryName = (c: string) => {
-    const cats: Record<string, string> = {
-      assignment: 'งานมอบหมาย (30%)',
-      quiz: 'แบบทดสอบ (20%)',
-      behavior: 'จิตพิสัย (20%)',
-      final: 'สอบปลายภาค (30%)'
-    };
-    return cats[c] || c;
+  const openSaveModal = async () => {
+    setShowSaveModal(true);
+    if (!modalLoaded) {
+      const [sRes, cRes] = await Promise.all([
+        fetch("/api/admin/subjects"),
+        fetch("/api/public/classrooms"),
+      ]);
+      const sData = await sRes.json();
+      const cData = await cRes.json();
+      if (sData.success) { setSubjects(sData.subjects); setSelSubject(sData.subjects[0]?.id || ""); }
+      if (cData.success) { setClassrooms(cData.classrooms); setSelClassroom(cData.classrooms[0]?.name || ""); }
+      setModalLoaded(true);
+    }
   };
 
-  const getGradeStyle = (grade: string) => {
-    if (grade.startsWith('A')) return `${styles.gradeBadge} ${styles.gradeA}`;
-    if (grade.startsWith('B')) return `${styles.gradeBadge} ${styles.gradeB}`;
-    if (grade.startsWith('C')) return `${styles.gradeBadge} ${styles.gradeC}`;
-    if (grade.startsWith('D')) return `${styles.gradeBadge} ${styles.gradeD}`;
-    if (grade.startsWith('F')) return `${styles.gradeBadge} ${styles.gradeF}`;
-    return styles.gradeBadge;
-  };
+  // ————————————————————————————————
+  // Summary stats
+  // ————————————————————————————————
+  const gradeCounts: Record<string, number> = {};
+  rows.forEach((r) => { gradeCounts[r.grade] = (gradeCounts[r.grade] || 0) + 1; });
+  const avg = rows.length > 0 ? (rows.reduce((s, r) => s + r.total, 0) / rows.length).toFixed(2) : "—";
 
-  const getGroupedAssignments = () => {
-    const groups: Record<string, Assignment[]> = {
-      assignment: [],
-      quiz: [],
-      behavior: [],
-      final: []
-    };
-    filteredAssignments.forEach(a => {
-      const cat = a.category || 'assignment';
-      if (groups[cat]) {
-        groups[cat].push(a);
-      }
-    });
-    return groups;
-  };
-
-  const groupedAssignments = getGroupedAssignments();
-
+  // ————————————————————————————————
+  // Render
+  // ————————————————————————————————
   return (
-    <div className="animate-fade-in">
-      {/* 1. Selection Filters Card */}
-      <div className={`${styles.filterCard} glass-card`}>
-        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, color: 'var(--text-main)' }}>
-          <BookOpen size={18} color="var(--primary)" />
-          <span>เลือกงานที่ต้องการกรอกคะแนน</span>
-        </h4>
-        
-        {isLoadingFilters ? (
-          <p className="text-muted">กำลังโหลดวิชาและห้องเรียน...</p>
-        ) : (
-          <div className={styles.filterRow}>
-            {/* Subject */}
-            <div className={styles.filterGroup}>
-              <label className={tableStyles.label}>รายวิชา</label>
-              <select
-                className={tableStyles.input}
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
+    <div className="animate-fade-in print-area">
+
+      {/* ───── Upload zone ───── */}
+      {rows.length === 0 && (
+        <div
+          className="glass-card"
+          onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) parseFile(f); }}
+          onDragOver={(e) => e.preventDefault()}
+          onClick={() => fileRef.current?.click()}
+          style={{
+            border: "2px dashed var(--primary)", borderRadius: "16px",
+            padding: "72px 24px", textAlign: "center", cursor: "pointer",
+            background: "rgba(99,102,241,0.03)",
+          }}
+        >
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
+            style={{ display: "none" }}
+            onChange={(e) => { if (e.target.files?.[0]) parseFile(e.target.files[0]); }}
+          />
+          <FileSpreadsheet size={56} color="var(--primary)" style={{ margin: "0 auto 16px" }} />
+          <h3 style={{ color: "var(--text-main)", fontWeight: 700, marginBottom: "8px" }}>
+            อัปโหลดไฟล์ชีตตัดเกรด
+          </h3>
+          <p style={{ color: "var(--text-sub)", fontSize: "0.9rem" }}>
+            ลากไฟล์มาวาง หรือคลิกเพื่อเลือก — รองรับ .xlsx, .xls, .csv
+          </p>
+          <div style={{
+            marginTop: "24px", display: "inline-flex", alignItems: "flex-start", gap: "8px",
+            background: "rgba(99,102,241,0.07)", border: "1px solid rgba(99,102,241,0.15)",
+            borderRadius: "10px", padding: "12px 16px", textAlign: "left",
+            fontSize: "0.82rem", color: "var(--text-sub)", maxWidth: "500px"
+          }}>
+            <Info size={15} color="var(--primary)" style={{ flexShrink: 0, marginTop: "2px" }} />
+            <span>
+              <strong style={{ color: "var(--text-main)" }}>รูปแบบชีต:</strong> แถว 1 = ชื่อวิชา | แถว 2 = หัวคอลัมน์ | แถว 3+ = ข้อมูลนักเรียน<br />
+              คอลัมน์: B=รหัส | C=ชื่อ | D=นามสกุล | E=ห้อง | <strong>F=งาน(30)</strong> | <strong>G=สอบย่อย(20)</strong> | <strong>H=ปลายภาค(30)</strong> | <strong>I=จิตพิสัย(20)</strong> | J=รวม | K=เกรด
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Loaded view ───── */}
+      {rows.length > 0 && (
+        <>
+          {/* Toolbar */}
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              {/* search */}
+              <div className={tableStyles.searchBar} style={{ maxWidth: "240px" }}>
+                <Search size={16} className={tableStyles.searchIcon} />
+                <input type="text" className={tableStyles.searchInput}
+                  placeholder="ค้นหาชื่อ/รหัส..."
+                  value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              {/* change file */}
+              <button
+                onClick={() => { setRows([]); setFileName(""); setSearch(""); setSavedOk(false); }}
+                style={{ padding: "8px 14px", border: "1px solid #ddd", borderRadius: "8px",
+                  background: "var(--bg-card)", cursor: "pointer", fontSize: "0.85rem", color: "var(--text-sub)" }}
               >
-                {subjects.map(s => (
-                  <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
-                ))}
-              </select>
+                เปลี่ยนไฟล์
+              </button>
             </div>
 
-            {/* Classroom */}
-            <div className={styles.filterGroup}>
-              <label className={tableStyles.label}>ห้องเรียน</label>
-              <select
-                className={tableStyles.input}
-                value={selectedClassroom}
-                onChange={(e) => setSelectedClassroom(e.target.value)}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => window.print()}
+                style={{ display: "flex", alignItems: "center", gap: "6px",
+                  padding: "9px 16px", border: "1px solid #ddd", borderRadius: "8px",
+                  background: "var(--bg-card)", cursor: "pointer", fontSize: "0.85rem", color: "var(--text-main)" }}
               >
-                {classrooms.map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Assignment */}
-            <div className={styles.filterGroup} style={{ flex: 1.5, opacity: activeTab === 'categories' ? 0.6 : 1 }}>
-              <label className={tableStyles.label}>งานมอบหมาย / ข้อสอบในห้องนี้</label>
-              {activeTab === 'categories' ? (
-                <select className={tableStyles.input} disabled style={{ cursor: 'not-allowed' }}>
-                  <option>-- แสดงคะแนนรวมทุกชิ้นงานสะสมแยกหมวดหมู่ --</option>
-                </select>
-              ) : filteredAssignments.length === 0 ? (
-                <select className={tableStyles.input} disabled>
-                  <option>-- ไม่มีงานมอบหมายในเงื่อนไขนี้ --</option>
-                </select>
-              ) : (
-                <select
-                  className={tableStyles.input}
-                  value={selectedAssignment}
-                  onChange={(e) => setSelectedAssignment(e.target.value)}
-                >
-                  {groupedAssignments.assignment.length > 0 && (
-                    <optgroup label="งานที่มอบหมาย (สัดส่วน 30 คะแนน)">
-                      {groupedAssignments.assignment.map(a => (
-                        <option key={a.id} value={a.id}>{a.title} ({a.full_score} คะแนนเต็ม)</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {groupedAssignments.quiz.length > 0 && (
-                    <optgroup label="แบบทดสอบ (สัดส่วน 20 คะแนน)">
-                      {groupedAssignments.quiz.map(a => (
-                        <option key={a.id} value={a.id}>{a.title} ({a.full_score} คะแนนเต็ม)</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {groupedAssignments.behavior.length > 0 && (
-                    <optgroup label="จิตพิสัย (สัดส่วน 20 คะแนน)">
-                      {groupedAssignments.behavior.map(a => (
-                        <option key={a.id} value={a.id}>{a.title} ({a.full_score} คะแนนเต็ม)</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {groupedAssignments.final.length > 0 && (
-                    <optgroup label="สอบปลายภาค (สัดส่วน 30 คะแนน)">
-                      {groupedAssignments.final.map(a => (
-                        <option key={a.id} value={a.id}>{a.title} ({a.full_score} คะแนนเต็ม)</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              )}
+                <Printer size={16} /> พิมพ์ / PDF
+              </button>
+              <button
+                onClick={openSaveModal}
+                disabled={savedOk}
+                style={{ display: "flex", alignItems: "center", gap: "6px",
+                  padding: "9px 18px", border: "none", borderRadius: "8px",
+                  background: savedOk ? "#10B981" : "var(--primary)", color: "#fff",
+                  cursor: savedOk ? "default" : "pointer", fontWeight: 700, fontSize: "0.9rem" }}
+              >
+                {savedOk ? <><CheckCircle size={16} /> บันทึกแล้ว</> : <><Save size={16} /> บันทึกเข้าระบบ</>}
+              </button>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* แท็บสลับโหมดการทำงาน */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '12px', 
-        marginBottom: '20px',
-        borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-        paddingBottom: '12px'
-      }}>
-        <button
-          type="button"
-          style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'individual' ? 'var(--primary)' : 'rgba(99, 102, 241, 0.06)',
-            color: activeTab === 'individual' ? '#fff' : 'var(--text-main)',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            boxShadow: activeTab === 'individual' ? '0 4px 10px rgba(99, 102, 241, 0.25)' : 'none'
-          }}
-          onClick={() => setActiveTab('individual')}
-        >
-          📝 กรอกคะแนนรายชิ้นงาน
-        </button>
-        <button
-          type="button"
-          style={{
-            padding: '10px 20px',
-            borderRadius: '8px',
-            border: 'none',
-            background: activeTab === 'categories' ? 'var(--primary)' : 'rgba(99, 102, 241, 0.06)',
-            color: activeTab === 'categories' ? '#fff' : 'var(--text-main)',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-            boxShadow: activeTab === 'categories' ? '0 4px 10px rgba(99, 102, 241, 0.25)' : 'none'
-          }}
-          onClick={() => setActiveTab('categories')}
-        >
-          📊 ดูคะแนนรวมแยกหมวดหมู่
-        </button>
-      </div>
+          {/* Document header (print) */}
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <h2 style={{ fontWeight: 800, fontSize: "1.4rem", color: "var(--text-main)", margin: 0 }}>
+              {sheetTitle || "สรุปคะแนนและตัดเกรด"}
+            </h2>
+            <p style={{ color: "var(--text-sub)", fontSize: "0.85rem", marginTop: "4px" }}>
+              {fileName} &nbsp;|&nbsp; {rows.length} คน &nbsp;|&nbsp; คะแนนเฉลี่ย {avg}
+            </p>
+          </div>
 
-      {activeTab === 'individual' ? (
-        <>
-          {/* 2. Score Gradebook Table Section */}
-          {!selectedAssignment ? (
-            <div className="glass-card text-center" style={{ padding: '50px 20px' }}>
-              <AlertTriangle size={44} color="var(--warning)" style={{ margin: '0 auto 16px' }} />
-              <h3>ไม่มีงานมอบหมาย</h3>
-              <p className="text-muted">ห้องเรียนและรายวิชานี้ยังไม่มีชิ้นงานที่มอบหมาย กรุณาไปที่เมนู &quot;สร้างงาน&quot; เพื่อสร้างงานมอบหมายชิ้นแรก</p>
-            </div>
-          ) : isLoadingScores ? (
-            <div style={{ textAlign: 'center', padding: '50px' }}>
-              <div style={{
-                width: '35px',
-                height: '35px',
-                border: '4px solid rgba(79, 70, 229, 0.1)',
-                borderRadius: '50%',
-                borderTopColor: 'var(--primary)',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 12px'
-              }} />
-              <p className="text-muted">กำลังดึงข้อมูลรายชื่อนักเรียนและช่องกรอกคะแนน...</p>
-            </div>
-          ) : (
-            <>
-              {/* Assignment stats & Search */}
-              <div className={styles.tableHeaderRow} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                {assignmentInfo && (
-                  <div className={styles.assignmentInfo} style={{ flexWrap: 'wrap', gap: '12px' }}>
-                    <div>
-                      <span className={styles.infoLabel}>คะแนนเต็มดิบ:</span> {assignmentInfo.full_score} คะแนน
-                    </div>
-                    <div style={{ borderLeft: '1px solid rgba(79, 70, 229, 0.15)', paddingLeft: '12px' }}>
-                      <span className={styles.infoLabel}>คะแนนเก็บจริง:</span> {assignmentInfo.keep_score} คะแนน
-                    </div>
-                    <div style={{ borderLeft: '1px solid rgba(79, 70, 229, 0.15)', paddingLeft: '12px' }}>
-                      <span className={styles.infoLabel}>หมวดหมู่คะแนน:</span> <strong style={{ color: 'var(--primary)' }}>{getCategoryName(assignmentInfo.category)}</strong>
-                    </div>
-                    <div style={{ borderLeft: '1px solid rgba(79, 70, 229, 0.15)', paddingLeft: '12px' }}>
-                      <span className={styles.infoLabel}>จำนวนนักเรียน:</span> {studentScores.length} คน
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* ปุ่มกรอกคะแนนเท่ากันทุกคน */}
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px', 
-                    background: 'rgba(99, 102, 241, 0.06)', 
-                    padding: '4px 10px', 
-                    borderRadius: 'var(--radius-md)', 
-                    border: '1px solid rgba(99, 102, 241, 0.12)' 
-                  }}>
-                    <input
-                      type="number"
-                      style={{ 
-                        width: '75px', 
-                        padding: '8px', 
-                        borderRadius: '6px', 
-                        border: '1px solid rgba(0, 0, 0, 0.15)', 
-                        fontSize: '0.9rem', 
-                        textAlign: 'center',
-                        background: 'var(--bg-main)',
-                        color: 'var(--text-main)'
-                      }}
-                      placeholder="คะแนน"
-                      min="0"
-                      max={assignmentInfo?.full_score}
-                      step="0.5"
-                      id="bulk-score-input"
-                    />
-                    <button
-                      type="button"
-                      className={tableStyles.addBtn}
-                      style={{ 
-                        padding: '8px 14px', 
-                        fontSize: '0.85rem', 
-                        background: 'var(--primary)', 
-                        color: '#fff', 
-                        border: 'none', 
-                        borderRadius: '6px', 
-                        cursor: 'pointer', 
-                        fontWeight: 600,
-                        boxShadow: '0 2px 6px rgba(99, 102, 241, 0.15)'
-                      }}
-                      onClick={() => {
-                        const val = (document.getElementById('bulk-score-input') as HTMLInputElement)?.value;
-                        if (val === '' || val === undefined) {
-                          showToast('กรุณากรอกตัวเลขคะแนนที่ต้องการก่อนกดปุ่มค่ะ', 'warning');
-                          return;
-                        }
-                        const scoreNum = Number(val);
-                        if (isNaN(scoreNum) || !assignmentInfo) return;
-                        
-                        const clampedScore = Math.max(0, Math.min(assignmentInfo.full_score, scoreNum));
-                        const calculated = Math.round(((clampedScore / assignmentInfo.full_score) * assignmentInfo.keep_score) * 100) / 100;
-                        
-                        const newScores = studentScores.map(student => ({
-                          ...student,
-                          raw_score: clampedScore,
-                          calculated_score: calculated
-                        }));
-                        setStudentScores(newScores);
-                        showToast(`ใส่คะแนนดิบ ${clampedScore} คะแนน ให้ทุกคนเรียบร้อย! โปรดอย่าลืมกดปุ่มบันทึกด้านล่างด้วยนะคะ`, 'success');
-                      }}
-                    >
-                      กรอกให้ทุกคนเท่ากัน
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    className={tableStyles.addBtn}
-                    style={{ 
-                      background: 'var(--primary)', 
-                      color: '#fff', 
-                      border: 'none', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      padding: '10px 16px', 
-                      borderRadius: 'var(--radius-md)', 
-                      cursor: 'pointer', 
-                      fontSize: '0.9rem', 
-                      fontWeight: 600,
-                      boxShadow: '0 4px 10px rgba(79, 70, 229, 0.2)'
-                    }}
-                    onClick={handleSaveScores}
-                    disabled={isSaving}
-                  >
-                    <Save size={16} />
-                    <span>{isSaving ? 'กำลังบันทึก...' : 'บันทึกคะแนน'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={tableStyles.addBtn}
-                    style={{ 
-                      background: '#8B5CF6', 
-                      color: '#fff', 
-                      border: 'none', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      padding: '10px 16px', 
-                      borderRadius: 'var(--radius-md)', 
-                      cursor: 'pointer', 
-                      fontSize: '0.9rem', 
-                      fontWeight: 600,
-                      boxShadow: '0 4px 10px rgba(139, 92, 246, 0.15)'
-                    }}
-                    onClick={() => setIsPasteModalOpen(true)}
-                  >
-                    <FileText size={16} />
-                    <span>วางคะแนนเรียงคน</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className={tableStyles.addBtn}
-                    style={{ 
-                      background: 'var(--success)', 
-                      color: '#fff', 
-                      border: 'none', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      padding: '10px 16px', 
-                      borderRadius: 'var(--radius-md)', 
-                      cursor: 'pointer', 
-                      fontSize: '0.9rem', 
-                      fontWeight: 600,
-                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.15)'
-                    }}
-                    onClick={() => scoreFileInputRef.current?.click()}
-                  >
-                    <Upload size={16} />
-                    <span>นำเข้าคะแนน Excel</span>
-                  </button>
-                  <input
-                    ref={scoreFileInputRef}
-                    type="file"
-                    accept=".xlsx, .xls"
-                    style={{ display: 'none' }}
-                    onChange={handleExcelScoreImport}
-                  />
-
-                  <div className={tableStyles.searchBar} style={{ maxWidth: '280px', margin: 0 }}>
-                    <Search size={18} className={tableStyles.searchIcon} />
-                    <input
-                      type="text"
-                      className={tableStyles.searchInput}
-                      placeholder="ค้นหานักเรียนในตาราง..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                  </div>
-                </div>
+          {/* Summary chips */}
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "20px" }} className="no-print">
+            {Object.entries(gradeCounts).sort((a, b) => Number(b[0]) - Number(a[0])).map(([g, c]) => (
+              <div key={g} style={{
+                padding: "6px 14px", borderRadius: "20px", fontSize: "0.82rem", fontWeight: 700,
+                background: gradeColor(g) + "20", color: gradeColor(g), border: `1px solid ${gradeColor(g)}50`
+              }}>
+                เกรด {g} : {c} คน
               </div>
+            ))}
+          </div>
 
-              {/* แผงดึงคอลัมน์คะแนนสะสมจาก Excel */}
-              {showColSelector && (
-                <div className="glass-card animate-scale-in" style={{ padding: '16px', marginBottom: '16px', background: 'rgba(99, 102, 241, 0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', border: '1px dashed var(--primary)', borderRadius: 'var(--radius-md)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>📊 ตรวจพบข้อมูลหลายช่อง! โปรดเลือกหัวข้อคะแนนใน Excel ที่จะดึง:</span>
-                    <select
-                      className={tableStyles.input}
-                      style={{ width: '250px', padding: '6px 12px', height: '38px', cursor: 'pointer' }}
-                      value={selectedExcelCol}
-                      onChange={(e) => setSelectedExcelCol(Number(e.target.value))}
-                    >
-                      <option value={-1}>-- เลือกหัวข้อคอลัมน์คะแนน --</option>
-                      {excelHeaders.map((header, idx) => (
-                        <option key={idx} value={idx}>{header || `คอลัมน์ที่ ${idx + 1}`}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      type="button"
-                      className={tableStyles.addBtn}
-                      onClick={applyExcelScores}
-                      style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                    >
-                      ดึงข้อมูลคะแนนเข้าตาราง
-                    </button>
-                    <button
-                      type="button"
-                      className={tableStyles.cancelBtn}
-                      onClick={() => setShowColSelector(false)}
-                      style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                    >
-                      ยกเลิก
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Scores Grading Matrix Table */}
-              {filteredStudentScores.length === 0 ? (
-                <div className={`${tableStyles.tableContainer} ${tableStyles.emptyState}`}>
-                  <Info size={36} style={{ margin: '0 auto 10px', opacity: 0.6 }} />
-                  <p>ไม่พบรายชื่อนักเรียนที่สอดคล้องกับคำค้นหา</p>
-                </div>
-              ) : (
-                <>
-                  <div className={tableStyles.tableContainer}>
-                    <table className={tableStyles.table}>
-                      <thead className={tableStyles.thead}>
-                        <tr>
-                          <th className={tableStyles.th} style={{ width: '60px' }}>ลำดับ</th>
-                          <th className={tableStyles.th} style={{ width: '130px' }}>รหัส</th>
-                          <th className={tableStyles.th} style={{ width: '180px' }}>ชื่อ - นามสกุล</th>
-                          <th className={tableStyles.th} style={{ width: '135px', textAlign: 'center' }}>คะแนนดิบที่ได้</th>
-                          <th className={tableStyles.th} style={{ width: '180px', textAlign: 'center' }}>เกรดสะสมวิชานี้ (ครูเห็น)</th>
-                          <th className={tableStyles.th}>ข้อเสนอแนะ (Feedback สำหรับนักเรียน)</th>
-                          <th className={tableStyles.th}>บันทึกส่วนตัวของครู (นักเรียนไม่เห็น)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredStudentScores.map((student, index) => (
-                          <tr key={student.student_id} className={tableStyles.tr}>
-                            <td className={tableStyles.td}>{index + 1}</td>
-                            <td className={tableStyles.td}>
-                              <span className={tableStyles.codeBadge} style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
-                                {student.student_code}
-                              </span>
-                            </td>
-                            <td className={tableStyles.td} style={{ fontWeight: 600 }}>
-                              {student.first_name} {student.last_name}
-                            </td>
-                            <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                                <input
-                                  type="number"
-                                  className={styles.scoreInput}
-                                  min="0"
-                                  max={assignmentInfo?.full_score}
-                                  step="0.5"
-                                  value={student.raw_score === -1 ? '' : student.raw_score}
-                                  onChange={(e) => handleScoreChange(index, e.target.value)}
-                                  placeholder="-"
-                                  disabled={isSaving}
-                                />
-                                <span style={{ fontSize: '0.85rem', color: 'var(--text-sub)' }}>
-                                  / {assignmentInfo?.full_score}
-                                </span>
-                              </div>
-                            </td>
-                            <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                              {student.overall_keep_max > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center' }}>
-                                  <span className={getGradeStyle(student.overall_grade)}>
-                                    เกรด {student.overall_grade}
-                                  </span>
-                                  <span style={{ fontSize: '0.7rem', color: 'var(--text-sub)' }}>
-                                    ({student.overall_keep_sum} / {student.overall_keep_max} คะแนน)
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-muted" style={{ fontSize: '0.85rem' }}>ไม่มีข้อมูล</span>
-                              )}
-                            </td>
-                            <td className={tableStyles.td}>
-                              <input
-                                type="text"
-                                className={styles.feedbackInput}
-                                placeholder="ข้อเสนอแนะต่อนักเรียน..."
-                                value={student.feedback}
-                                onChange={(e) => handleFeedbackChange(index, e.target.value)}
-                                disabled={isSaving}
-                              />
-                            </td>
-                            <td className={tableStyles.td}>
-                              <input
-                                type="text"
-                                className={styles.noteInput}
-                                placeholder="บันทึกย่อส่วนตัว..."
-                                value={student.note}
-                                onChange={(e) => handleNoteChange(index, e.target.value)}
-                                disabled={isSaving}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Save Scores Actions Bar */}
-                  <div className={styles.saveFooter}>
-                    <button
-                      type="button"
-                      className={styles.saveBtn}
-                      style={{ background: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}
-                      onClick={handleSaveScores}
-                      disabled={isSaving}
-                    >
-                      <Save size={18} />
-                      <span>{isSaving ? 'กำลังบันทึกคะแนน...' : 'บันทึกและคำนวณคะแนนทั้งหมด'}</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {/* ตารางสรุปคะแนนรวมแยกตาม 4 หมวดหมู่สัดส่วนน้ำหนักสะสม */}
-          {isCategorySummaryLoading ? (
-            <div style={{ textAlign: 'center', padding: '50px' }}>
-              <div style={{
-                width: '35px',
-                height: '35px',
-                border: '4px solid rgba(79, 70, 229, 0.1)',
-                borderRadius: '50%',
-                borderTopColor: 'var(--primary)',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 12px'
-              }} />
-              <p className="text-muted">กำลังดึงและคำนวณข้อมูลสรุปรายหมวดหมู่...</p>
-            </div>
-          ) : categorySummaryData.length === 0 ? (
-            <div className="glass-card text-center" style={{ padding: '50px 20px' }}>
-              <AlertTriangle size={44} color="var(--warning)" style={{ margin: '0 auto 16px' }} />
-              <h3>ไม่มีข้อมูลนักเรียน</h3>
-              <p className="text-muted">ไม่พบข้อมูลคะแนนวิชานี้สำหรับห้องเรียนที่เลือก</p>
-            </div>
-          ) : (
-            <div className={tableStyles.tableContainer} style={{ background: 'var(--bg-card)', boxShadow: '0 4px 20px rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 'var(--radius-md)' }}>
+          {/* Main table */}
+          <div className="glass-card" style={{ padding: 0, overflow: "hidden", borderRadius: "12px" }}>
+            <div className={tableStyles.tableContainer} style={{ margin: 0 }}>
               <table className={tableStyles.table}>
-                <thead className={tableStyles.thead} style={{ background: 'rgba(99, 102, 241, 0.04)' }}>
+                <thead className={tableStyles.thead}>
                   <tr>
-                    <th className={tableStyles.th} style={{ width: '60px', textAlign: 'center' }}>ลำดับ</th>
-                    <th className={tableStyles.th} style={{ width: '130px' }}>รหัสประจำตัว</th>
-                    <th className={tableStyles.th} style={{ width: '180px' }}>ชื่อ - นามสกุล</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center' }}>งานมอบหมาย (30%)</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center' }}>แบบทดสอบ (20%)</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center' }}>จิตพิสัย (20%)</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center' }}>สอบปลายภาค (30%)</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center', width: '130px' }}>คะแนนเก็บสะสมรวม</th>
-                    <th className={tableStyles.th} style={{ textAlign: 'center', width: '120px' }}>เกรดสะสมวิชานี้</th>
+                    <th className={tableStyles.th} style={{ width: "50px", textAlign: "center" }}>ลำดับ</th>
+                    <th className={tableStyles.th} style={{ width: "120px" }}>รหัสนักเรียน</th>
+                    <th className={tableStyles.th}>ชื่อ - นามสกุล</th>
+                    <th className={tableStyles.th} style={{ width: "100px" }}>ห้อง</th>
+                    <th className={tableStyles.th} style={{ width: "80px", textAlign: "center" }}>งาน<br/><small style={{fontWeight:400,color:"#888"}}>/30</small></th>
+                    <th className={tableStyles.th} style={{ width: "80px", textAlign: "center" }}>สอบย่อย<br/><small style={{fontWeight:400,color:"#888"}}>/20</small></th>
+                    <th className={tableStyles.th} style={{ width: "90px", textAlign: "center" }}>ปลายภาค<br/><small style={{fontWeight:400,color:"#888"}}>/30</small></th>
+                    <th className={tableStyles.th} style={{ width: "80px", textAlign: "center" }}>จิตพิสัย<br/><small style={{fontWeight:400,color:"#888"}}>/20</small></th>
+                    <th className={tableStyles.th} style={{ width: "80px", textAlign: "center", background: "rgba(99,102,241,0.06)" }}>
+                      <strong>รวม</strong><br/><small style={{fontWeight:400,color:"#888"}}>/100</small>
+                    </th>
+                    <th className={tableStyles.th} style={{ width: "80px", textAlign: "center" }}>เกรด</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {categorySummaryData.map((row, index) => (
-                    <tr key={row.student_id} className={tableStyles.tr}>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>{index + 1}</td>
-                      <td className={tableStyles.td}>
-                        <span className={tableStyles.codeBadge} style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
-                          {row.student_id}
-                        </span>
-                      </td>
-                      <td className={tableStyles.td} style={{ fontWeight: 600 }}>{row.first_name} {row.last_name}</td>
-                      
-                      {/* Categories weights */}
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <strong style={{ fontSize: '1rem', color: '#6B7280' }}>{Math.round(row.catSums.assignment * 100) / 100}</strong>
-                        <span style={{ color: 'var(--text-sub)', fontSize: '0.8rem' }}> / {row.catMaxs.assignment}</span>
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <strong style={{ fontSize: '1rem', color: 'var(--primary)' }}>{Math.round(row.catSums.quiz * 100) / 100}</strong>
-                        <span style={{ color: 'var(--text-sub)', fontSize: '0.8rem' }}> / {row.catMaxs.quiz}</span>
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <strong style={{ fontSize: '1rem', color: '#10B981' }}>{Math.round(row.catSums.behavior * 100) / 100}</strong>
-                        <span style={{ color: 'var(--text-sub)', fontSize: '0.8rem' }}> / {row.catMaxs.behavior}</span>
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <strong style={{ fontSize: '1rem', color: '#EF4444' }}>{Math.round(row.catSums.final * 100) / 100}</strong>
-                        <span style={{ color: 'var(--text-sub)', fontSize: '0.8rem' }}> / {row.catMaxs.final}</span>
-                      </td>
-                      
-                      {/* Overall Sum & Grade */}
-                      <td className={tableStyles.td} style={{ textAlign: 'center', fontWeight: 800, color: 'var(--primary)', fontSize: '1.05rem' }}>
-                        {row.keep_score_sum}
-                      </td>
-                      <td className={tableStyles.td} style={{ textAlign: 'center' }}>
-                        <span className={getGradeStyle(row.grade)}>
-                          เกรด {row.grade}
-                        </span>
+                  {filteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: "30px", color: "var(--text-sub)" }}>
+                        ไม่พบข้อมูลที่ตรงกับการค้นหา
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredRows.map((r) => (
+                      <tr key={r.student_code} className={tableStyles.tr}>
+                        <td className={tableStyles.td} style={{ textAlign: "center", color: "var(--text-sub)" }}>{r.no}</td>
+                        <td className={tableStyles.td}>
+                          <span className={tableStyles.codeBadge}>{r.student_code}</span>
+                        </td>
+                        <td className={tableStyles.td} style={{ fontWeight: 600 }}>{r.first_name} {r.last_name}</td>
+                        <td className={tableStyles.td} style={{ fontSize: "0.85rem", color: "var(--text-sub)" }}>{r.classroom}</td>
+                        <td className={tableStyles.td} style={{ textAlign: "center", fontWeight: 600 }}>{r.assignment}</td>
+                        <td className={tableStyles.td} style={{ textAlign: "center", fontWeight: 600 }}>{r.quiz}</td>
+                        <td className={tableStyles.td} style={{ textAlign: "center", fontWeight: 600 }}>{r.final}</td>
+                        <td className={tableStyles.td} style={{ textAlign: "center", fontWeight: 600 }}>{r.behavior}</td>
+                        <td className={tableStyles.td} style={{ textAlign: "center", background: "rgba(99,102,241,0.04)" }}>
+                          <strong style={{ fontSize: "1rem", color: "var(--primary)" }}>{r.total}</strong>
+                        </td>
+                        <td className={tableStyles.td} style={{ textAlign: "center" }}>
+                          <span style={{
+                            display: "inline-block", padding: "3px 12px", borderRadius: "20px",
+                            fontWeight: 800, fontSize: "0.9rem",
+                            background: gradeColor(r.grade) + "20",
+                            color: gradeColor(r.grade),
+                            border: `1px solid ${gradeColor(r.grade)}50`
+                          }}>
+                            {r.grade}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
+          </div>
+
+          {/* Footer stats */}
+          <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end", gap: "20px", fontSize: "0.85rem", color: "var(--text-sub)" }} className="no-print">
+            <span>ทั้งหมด <strong>{rows.length}</strong> คน</span>
+            <span>กรองแล้ว <strong>{filteredRows.length}</strong> คน</span>
+            <span>คะแนนเฉลี่ย <strong style={{ color: "var(--primary)" }}>{avg}</strong></span>
+          </div>
         </>
       )}
 
-      {/* โมดอลสำหรับคัดลอกคะแนนมาวางเรียงลำดับคน */}
-      {isPasteModalOpen && (
+      {/* ───── Save Modal ───── */}
+      {showSaveModal && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.45)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 9999,
-          backdropFilter: 'blur(5px)',
-          animation: 'fadeIn 0.2s ease-out'
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "center"
         }}>
-          <div className="glass-card" style={{
-            width: '460px',
-            padding: '24px',
-            background: 'var(--bg-card-solid)',
-            boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
-            borderRadius: 'var(--radius-md)',
-            border: '1px solid var(--primary-light)',
-            backdropFilter: 'none',
-            WebkitBackdropFilter: 'none',
-            zIndex: 10000
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '10px', fontWeight: 700, color: 'var(--text-main)', fontSize: '1.2rem' }}>
-              วางคะแนนสะสมเรียงตามลำดับรายชื่อ
+          <div className="glass-card" style={{ width: "400px", padding: "28px", borderRadius: "16px" }}>
+            <h3 style={{ marginBottom: "16px", fontWeight: 700, color: "var(--text-main)" }}>
+              บันทึกคะแนนเข้าระบบ
             </h3>
-            <p style={{ fontSize: '0.82rem', color: 'var(--text-sub)', marginBottom: '16px', lineHeight: 1.4 }}>
-              คัดลอกคะแนน 1 คอลัมน์จาก Excel/Google Sheets มาวางด้านล่างได้เลยค่ะ ระบบจะใส่คะแนนให้เด็กๆ เรียงจากคนแรกไล่ลงไปตามลำดับในตารางขณะนี้:
+            <p style={{ fontSize: "0.85rem", color: "var(--text-sub)", marginBottom: "20px" }}>
+              เลือกวิชาและห้องเรียนที่ต้องการบันทึกคะแนนจากชีตนี้
             </p>
-            <textarea
-              style={{
-                width: '100%',
-                height: '180px',
-                padding: '12px',
-                borderRadius: '8px',
-                border: '1.5px solid var(--primary-light)',
-                fontFamily: 'monospace',
-                fontSize: '0.95rem',
-                background: 'var(--bg-card-solid)',
-                color: 'var(--text-main)',
-                marginBottom: '16px',
-                resize: 'none',
-                lineHeight: '1.5',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
-              }}
-              placeholder="ตัวอย่างเช่น:&#10;15&#10;18.5&#10;ค้างส่ง (ปล่อยว่าง)&#10;20"
-              value={pastedScoresText}
-              onChange={(e) => setPastedScoresText(e.target.value)}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                className={tableStyles.cancelBtn}
-                onClick={() => {
-                  setIsPasteModalOpen(false);
-                  setPastedScoresText('');
-                }}
-              >
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+              <div>
+                <label className={tableStyles.label}>รายวิชา</label>
+                <select className={tableStyles.input} value={selSubject} onChange={(e) => setSelSubject(e.target.value)}>
+                  {subjects.map((s) => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={tableStyles.label}>ห้องเรียน</label>
+                <select className={tableStyles.input} value={selClassroom} onChange={(e) => setSelClassroom(e.target.value)}>
+                  {classrooms.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button onClick={() => setShowSaveModal(false)}
+                style={{ padding: "9px 18px", border: "1px solid #ddd", borderRadius: "8px",
+                  background: "var(--bg-card)", cursor: "pointer", color: "var(--text-sub)" }}>
                 ยกเลิก
               </button>
               <button
-                type="button"
-                className={tableStyles.addBtn}
-                style={{ background: 'var(--primary)', color: '#fff', border: 'none' }}
-                onClick={() => {
-                  if (!assignmentInfo) return;
-                  const lines = pastedScoresText.split('\n').map(l => l.trim());
-                  
-                  const newScores = [...studentScores];
-                  let matchCount = 0;
-                  
-                  filteredStudentScores.forEach((visibleStudent, idx) => {
-                    if (idx < lines.length) {
-                      const val = lines[idx];
-                      const targetIdx = newScores.findIndex(s => s.student_id === visibleStudent.student_id);
-                      
-                      if (targetIdx !== -1) {
-                        if (val === '' || val.toLowerCase().includes('ค้าง') || val === '-') {
-                          newScores[targetIdx].raw_score = -1;
-                          newScores[targetIdx].calculated_score = 0;
-                          matchCount++;
-                        } else {
-                          const raw = Number(val);
-                          if (!isNaN(raw)) {
-                            const clampedRaw = Math.max(0, Math.min(assignmentInfo.full_score, raw));
-                            const calculated = Math.round(((clampedRaw / assignmentInfo.full_score) * assignmentInfo.keep_score) * 100) / 100;
-                            newScores[targetIdx].raw_score = clampedRaw;
-                            newScores[targetIdx].calculated_score = calculated;
-                            matchCount++;
-                          }
-                        }
-                      }
-                    }
-                  });
-                  
-                  setStudentScores(newScores);
-                  setIsPasteModalOpen(false);
-                  setPastedScoresText('');
-                  showToast(`วางคะแนนด่วนสำเร็จเรียบร้อย ${matchCount} คน! อย่าลืมกดปุ่มบันทึกคะแนนสะสมจริงด้านล่างตารางนะคะ`, 'success');
-                }}
-              >
-                ยืนยันการวางคะแนน
+                disabled={isSaving}
+                onClick={async () => { await handleSave(selSubject, selClassroom); setShowSaveModal(false); }}
+                style={{ padding: "9px 20px", border: "none", borderRadius: "8px",
+                  background: "var(--primary)", color: "#fff", fontWeight: 700, cursor: isSaving ? "not-allowed" : "pointer" }}>
+                {isSaving ? "กำลังบันทึก..." : "ยืนยันบันทึก"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Print styles */}
+      <style jsx global>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 }
